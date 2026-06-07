@@ -1,0 +1,6 @@
+numpy<2.0
+numba==0.60.0
+llvmlite==0.43.0
+scikit-learn==1.5.2
+joblib
+autofeat
