@@ -6,6 +6,7 @@ RANDOM_SEED = 42
 
 # --- Dataset settings ---
 
+# Supported datasets: "california_housing", "diabetes"
 DATASET_NAME = "california_housing"
 TEST_SIZE = 0.2
 

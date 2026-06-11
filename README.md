@@ -4,9 +4,11 @@ A modular Python machine learning project for building a regression ensemble opt
 
 ## Overview
 
-The current version implements the initial data preparation stage for the California Housing dataset, including capped target removal, development/test splitting, feature scaling, optional AutoFeat feature engineering, and saving prepared arrays and fitted preprocessing objects.
+The current version implements the initial data preparation stage for supported regression datasets, including dataset loading, development/test splitting, feature scaling, optional AutoFeat feature engineering, and saving prepared arrays and fitted preprocessing objects.
 
-Future updates will add support for additional regression datasets, Optuna-based model tuning, out-of-fold prediction generation, ensemble search, and regression performance comparison.
+The project supports California Housing and Diabetes datasets. For California Housing, capped target values are removed before splitting.
+
+Future updates will add Optuna-based model tuning, out-of-fold prediction generation, ensemble search, and regression performance comparison.
 
 ## Project Structure
 
@@ -15,6 +17,7 @@ Future updates will add support for additional regression datasets, Optuna-based
 `environment.py` — numerical library thread settings for improved reproducibility\
 `datasets/loader.py` — dataset dispatcher\
 `datasets/california_housing.py` — California Housing dataset loading and cleaning\
+`datasets/diabetes.py` — Diabetes dataset loading\
 `preprocessing.py` — development/test splitting and standard feature scaling\
 `feature_engineering.py` — optional AutoFeat feature engineering and scaling\
 `storage.py` — saving and loading NumPy arrays and fitted preprocessing objects\
@@ -24,8 +27,8 @@ Future updates will add support for additional regression datasets, Optuna-based
 
 The current pipeline:
 
-- loads the California Housing dataset
-- removes capped target values
+- loads the selected regression dataset
+- removes capped target values for California Housing
 - splits the data into development and test sets
 - scales the original features
 - optionally applies AutoFeat feature engineering
@@ -61,9 +64,10 @@ Important settings include:
 `USE_AUTOFEAT` — whether to apply AutoFeat feature engineering\
 `PREPARED_DATA_DIR` — output folder for prepared data
 
-The current supported dataset is:
+The currently supported datasets are:
 
-`california_housing`
+`california_housing`\
+`diabetes`
 
 ## AutoFeat
 
@@ -93,7 +97,6 @@ These files are ignored by Git because they are generated artifacts rather than 
 
 Future updates may add:
 
-- Diabetes dataset support
 - Optuna hyperparameter optimization
 - out-of-fold prediction generation
 - ensemble search
