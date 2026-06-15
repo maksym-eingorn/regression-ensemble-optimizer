@@ -10,7 +10,7 @@ import config
 from datasets.loader import load_dataset
 from feature_engineering import apply_autofeat, scale_feature_engineered_data
 from preprocessing import split_dev_test, scale_dev_test
-from storage import save_numpy_arrays, save_objects
+from storage import get_dataset_output_dir, save_numpy_arrays, save_objects
 
 
 def print_shapes(arrays: dict[str, np.ndarray]) -> None:
@@ -35,11 +35,11 @@ def main() -> None:
         "X_test": X_test,
         "y_test": y_test,
         "X_dev_scaled": X_dev_scaled,
-        "X_test_scaled": X_test_scaled,
+        "X_test_scaled": X_test_scaled
     }
 
     objects_to_save = {
-        "scaler": scaler,
+        "scaler": scaler
     }
 
     if config.USE_AUTOFEAT:
@@ -53,18 +53,23 @@ def main() -> None:
             "X_dev_fe": X_dev_fe,
             "X_test_fe": X_test_fe,
             "X_dev_fe_scaled": X_dev_fe_scaled,
-            "X_test_fe_scaled": X_test_fe_scaled,
+            "X_test_fe_scaled": X_test_fe_scaled
         })
 
         objects_to_save.update({
             "afreg": afreg,
-            "scaler_fe": scaler_fe,
+            "scaler_fe": scaler_fe
         })
 
-    save_numpy_arrays(config.PREPARED_DATA_DIR, arrays_to_save)
-    save_objects(config.PREPARED_DATA_DIR, objects_to_save)
+    output_dir = get_dataset_output_dir(
+        config.PREPARED_DATA_DIR,
+        config.DATASET_NAME
+    )
 
-    print("Prepared data saved successfully.")
+    save_numpy_arrays(output_dir, arrays_to_save)
+    save_objects(output_dir, objects_to_save)
+
+    print(f"Prepared data saved to: {output_dir}")
     print()
     print_shapes(arrays_to_save)
 

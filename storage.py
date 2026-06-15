@@ -6,8 +6,61 @@ import joblib
 import numpy as np
 
 
+BASE_ARRAY_NAMES = [
+    "X",
+    "y",
+    "X_dev",
+    "y_dev",
+    "X_test",
+    "y_test",
+    "X_dev_scaled",
+    "X_test_scaled"
+]
+
+AUTOFEAT_ARRAY_NAMES = [
+    "X_dev_fe",
+    "X_test_fe",
+    "X_dev_fe_scaled",
+    "X_test_fe_scaled"
+]
+
+BASE_OBJECT_NAMES = [
+    "scaler"
+]
+
+AUTOFEAT_OBJECT_NAMES = [
+    "afreg",
+    "scaler_fe"
+]
+
+
+def get_dataset_output_dir(root_dir: str | Path, dataset_name: str) -> Path:
+    """Return the output directory for a specific prepared dataset."""
+    return Path(root_dir) / dataset_name
+
+
+def get_prepared_array_names(include_autofeat: bool) -> list[str]:
+    """Return the expected prepared NumPy array names."""
+    names = BASE_ARRAY_NAMES.copy()
+
+    if include_autofeat:
+        names.extend(AUTOFEAT_ARRAY_NAMES)
+
+    return names
+
+
+def get_prepared_object_names(include_autofeat: bool) -> list[str]:
+    """Return the expected fitted preprocessing object names."""
+    names = BASE_OBJECT_NAMES.copy()
+
+    if include_autofeat:
+        names.extend(AUTOFEAT_OBJECT_NAMES)
+
+    return names
+
+
 def save_numpy_arrays(
-    output_dir: str,
+    output_dir: str | Path,
     arrays: dict[str, np.ndarray]
 ) -> None:
     """Save multiple NumPy arrays into an output directory."""
@@ -19,7 +72,7 @@ def save_numpy_arrays(
 
 
 def load_numpy_arrays(
-    output_dir: str,
+    output_dir: str | Path,
     names: list[str]
 ) -> dict[str, np.ndarray]:
     """Load multiple NumPy arrays from an output directory."""
@@ -32,7 +85,7 @@ def load_numpy_arrays(
 
 
 def save_objects(
-    output_dir: str,
+    output_dir: str | Path,
     objects: dict[str, object]
 ) -> None:
     """Save multiple Python objects with joblib."""
@@ -44,7 +97,7 @@ def save_objects(
 
 
 def load_objects(
-    output_dir: str,
+    output_dir: str | Path,
     names: list[str]
 ) -> dict[str, object]:
     """Load multiple Python objects saved with joblib."""
@@ -54,3 +107,17 @@ def load_objects(
         name: joblib.load(output_path / f"{name}.pkl")
         for name in names
     }
+
+
+def load_prepared_data(
+    output_dir: str | Path,
+    include_autofeat: bool
+) -> tuple[dict[str, np.ndarray], dict[str, object]]:
+    """Load prepared arrays and fitted preprocessing objects."""
+    array_names = get_prepared_array_names(include_autofeat)
+    object_names = get_prepared_object_names(include_autofeat)
+
+    arrays = load_numpy_arrays(output_dir, array_names)
+    objects = load_objects(output_dir, object_names)
+
+    return arrays, objects

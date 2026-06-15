@@ -36,9 +36,10 @@ The current pipeline:
 - saves prepared arrays as `.npy` files
 - saves fitted preprocessing objects as `.pkl` files
 
-Generated data artifacts are saved locally in:
+Generated data artifacts are saved locally in dataset-specific subfolders:
 
-`prepared_data/`
+`prepared_data/california_housing/`\
+`prepared_data/diabetes/`
 
 ## How to Run
 
@@ -50,7 +51,7 @@ Then run:
 
 `python main.py`
 
-The script prepares the selected dataset and saves processed outputs into `prepared_data/`.
+The script prepares the selected dataset and saves processed outputs into the corresponding dataset-specific subfolder within `prepared_data/`.
 
 ## Configuration
 
@@ -62,7 +63,7 @@ Important settings include:
 `TEST_SIZE` — test set fraction\
 `RANDOM_SEED` — random seed for reproducibility\
 `USE_AUTOFEAT` — whether to apply AutoFeat feature engineering\
-`PREPARED_DATA_DIR` — output folder for prepared data
+`PREPARED_DATA_DIR` — root output folder for prepared data
 
 The currently supported datasets are:
 
