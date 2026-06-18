@@ -5,3 +5,4 @@ __pycache__/
 *.npy
 *.pkl
 prepared_data/
+optuna_results/

@@ -1,0 +1,48 @@
+# tuning/result_storage.py
+
+from pathlib import Path
+
+import joblib
+import numpy as np
+import optuna
+
+
+def get_optuna_result_dir(
+    root_dir: str | Path, dataset_name: str, feature_set: str, model_name: str
+) -> Path:
+    """Return the output directory for Optuna results."""
+    return Path(root_dir) / dataset_name / feature_set / model_name
+
+
+def save_optuna_results(
+    output_dir: str | Path,
+    study: optuna.study.Study,
+    trial_numbers: np.ndarray,
+    oof_predictions: np.ndarray,
+    rmses: np.ndarray,
+    hyperparams: list[dict[str, object]]
+) -> None:
+    """Save Optuna study results and out-of-fold predictions."""
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    joblib.dump(study, output_path / "study.pkl", compress=3)
+    joblib.dump(trial_numbers, output_path / "trial_numbers.pkl", compress=3)
+    joblib.dump(
+        oof_predictions, output_path / "oof_predictions.pkl", compress=3
+    )
+    joblib.dump(rmses, output_path / "rmses.pkl", compress=3)
+    joblib.dump(hyperparams, output_path / "hyperparams.pkl", compress=3)
+
+
+def load_optuna_results(output_dir: str | Path) -> dict[str, object]:
+    """Load saved Optuna study results and out-of-fold predictions."""
+    output_path = Path(output_dir)
+
+    return {
+        "study": joblib.load(output_path / "study.pkl"),
+        "trial_numbers": joblib.load(output_path / "trial_numbers.pkl"),
+        "oof_predictions": joblib.load(output_path / "oof_predictions.pkl"),
+        "rmses": joblib.load(output_path / "rmses.pkl"),
+        "hyperparams": joblib.load(output_path / "hyperparams.pkl")
+    }

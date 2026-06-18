@@ -4,3 +4,5 @@ llvmlite==0.43.0
 scikit-learn==1.5.2
 joblib
 autofeat
+optuna==4.5.0
+xgboost==3.0.2

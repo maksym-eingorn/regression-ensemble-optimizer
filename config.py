@@ -24,6 +24,21 @@ AUTOFEAT_FEATENG_STEPS = 2
 AUTOFEAT_FEATSEL_RUNS = 5
 AUTOFEAT_N_JOBS = 1
 
+# --- XGBoost Optuna tuning ---
+
+# Supported feature sets:
+# "original", "original_scaled", "autofeat", "autofeat_scaled"
+XGBOOST_FEATURE_SET = "original_scaled"
+
+XGBOOST_N_TRIALS = 1000
+XGBOOST_N_JOBS = 1
+XGBOOST_N_SPLITS = 5
+XGBOOST_N_ESTIMATORS_MIN = 100
+XGBOOST_N_ESTIMATORS_MAX = 1000
+XGBOOST_N_ESTIMATORS_STEP = 50
+XGBOOST_VERBOSE = True
+
 # --- Output paths ---
 
 PREPARED_DATA_DIR = "prepared_data"
+OPTUNA_RESULTS_DIR = "optuna_results"
