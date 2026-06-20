@@ -3,37 +3,53 @@
 import numpy as np
 
 
+def _to_numpy_array(array_like) -> np.ndarray:
+    """Convert an array-like object to a NumPy array."""
+    if isinstance(array_like, np.ndarray):
+        return array_like
+
+    if hasattr(array_like, "to_numpy"):
+        return array_like.to_numpy()
+
+    return np.asarray(array_like)
+
+
+def validate_feature_target_arrays(
+    X, y, X_name: str, y_name: str, sample_label: str = "n_samples"
+) -> tuple[np.ndarray, np.ndarray]:
+    """Validate the feature matrix and the target vector."""
+    X = _to_numpy_array(X)
+    y = _to_numpy_array(y)
+
+    if X.ndim != 2:
+        raise ValueError(
+            f"{X_name} must be 2D ({sample_label}, n_features), "
+            f"got {X.ndim}D."
+        )
+
+    if y.ndim != 1:
+        raise ValueError(
+            f"{y_name} must be 1D ({sample_label},), got {y.ndim}D."
+        )
+
+    if X.shape[0] != y.shape[0]:
+        raise ValueError(
+            f"Numbers of samples in {X_name} and {y_name} must match, "
+            f"got {X.shape[0]} != {y.shape[0]}."
+        )
+
+    return X, y
+
+
 def validate_regression_inputs(X_dev, y_dev) -> tuple[np.ndarray, np.ndarray]:
     """Validate and return development features and target as NumPy arrays."""
-    if not isinstance(X_dev, np.ndarray):
-        if hasattr(X_dev, "to_numpy"):
-            X_dev = X_dev.to_numpy()
-        else:
-            X_dev = np.asarray(X_dev)
-
-    if not isinstance(y_dev, np.ndarray):
-        if hasattr(y_dev, "to_numpy"):
-            y_dev = y_dev.to_numpy()
-        else:
-            y_dev = np.asarray(y_dev)
-
-    if X_dev.ndim != 2:
-        raise ValueError(
-            f"X_dev must be 2D (n_samples_dev, n_features), got {X_dev.ndim}D."
-        )
-
-    if y_dev.ndim != 1:
-        raise ValueError(
-            f"y_dev must be 1D (n_samples_dev,), got {y_dev.ndim}D."
-        )
-
-    if X_dev.shape[0] != y_dev.shape[0]:
-        raise ValueError(
-            f"Numbers of samples in X_dev and y_dev must match, "
-            f"got {X_dev.shape[0]} != {y_dev.shape[0]}."
-        )
-
-    return X_dev, y_dev
+    return validate_feature_target_arrays(
+        X_dev,
+        y_dev,
+        "X_dev",
+        "y_dev",
+        sample_label="n_samples_dev"
+    )
 
 
 def validate_positive_integer(value: int, name: str) -> None:

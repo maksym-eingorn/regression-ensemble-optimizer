@@ -3,11 +3,25 @@
 import numpy as np
 
 
-SUPPORTED_FEATURE_SETS = {
+SUPPORTED_FEATURE_SETS = [
+    "original",
+    "original_scaled",
+    "autofeat",
+    "autofeat_scaled"
+]
+
+DEVELOPMENT_FEATURE_KEYS = {
     "original": "X_dev",
     "original_scaled": "X_dev_scaled",
     "autofeat": "X_dev_fe",
-    "autofeat_scaled": "X_dev_fe_scaled",
+    "autofeat_scaled": "X_dev_fe_scaled"
+}
+
+TEST_FEATURE_KEYS = {
+    "original": "X_test",
+    "original_scaled": "X_test_scaled",
+    "autofeat": "X_test_fe",
+    "autofeat_scaled": "X_test_fe_scaled"
 }
 
 
@@ -26,6 +40,18 @@ def feature_set_requires_autofeat(feature_set: str) -> bool:
     validate_feature_set(feature_set)
 
     return feature_set in {"autofeat", "autofeat_scaled"}
+
+
+def _get_array_by_key(
+    arrays: dict[str, np.ndarray], key: str
+) -> np.ndarray:
+    """Return an array from prepared data by key."""
+    if key not in arrays:
+        raise KeyError(
+            f"Required array '{key}' was not found in prepared data."
+        )
+
+    return arrays[key]
 
 
 def get_development_data(
@@ -50,17 +76,51 @@ def get_development_data(
     """
     validate_feature_set(feature_set)
 
-    X_key = SUPPORTED_FEATURE_SETS[feature_set]
+    X_key = DEVELOPMENT_FEATURE_KEYS[feature_set]
     y_key = "y_dev"
 
-    if X_key not in arrays:
-        raise KeyError(
-            f"Required feature array '{X_key}' was not found in prepared data."
-        )
+    X_dev = _get_array_by_key(arrays, X_key)
+    y_dev = _get_array_by_key(arrays, y_key)
 
-    if y_key not in arrays:
-        raise KeyError(
-            f"Required target array '{y_key}' was not found in prepared data."
-        )
+    return X_dev, y_dev
 
-    return arrays[X_key], arrays[y_key]
+
+def get_test_data(
+    arrays: dict[str, np.ndarray], feature_set: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Select test features and target from prepared arrays.
+
+    Parameters
+    ----------
+    arrays
+        Dictionary of prepared NumPy arrays.
+    feature_set
+        Feature set name.
+
+    Returns
+    -------
+    X_test : np.ndarray
+        Selected test feature matrix.
+    y_test : np.ndarray
+        Test target vector.
+    """
+    validate_feature_set(feature_set)
+
+    X_key = TEST_FEATURE_KEYS[feature_set]
+    y_key = "y_test"
+
+    X_test = _get_array_by_key(arrays, X_key)
+    y_test = _get_array_by_key(arrays, y_key)
+
+    return X_test, y_test
+
+
+def get_development_and_test_data(
+    arrays: dict[str, np.ndarray], feature_set: str
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Select development and test data for a configured feature set."""
+    X_dev, y_dev = get_development_data(arrays, feature_set)
+    X_test, y_test = get_test_data(arrays, feature_set)
+
+    return X_dev, y_dev, X_test, y_test
