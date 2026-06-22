@@ -4,20 +4,23 @@ A modular Python machine learning project for building a regression ensemble opt
 
 ## Overview
 
-The current version implements data preparation for supported regression datasets, XGBoost hyperparameter tuning with Optuna, and final XGBoost evaluation on the test set.
+The current version implements data preparation for supported regression datasets, XGBoost and LightGBM hyperparameter tuning with Optuna, and final XGBoost evaluation on the test set.
 
 The data preparation pipeline includes dataset loading, development/test splitting, feature scaling, optional AutoFeat feature engineering, and saving prepared arrays and fitted preprocessing objects.
 
 The XGBoost workflow loads prepared development data, selects the configured feature set, runs Optuna with K-fold cross-validation, stores out-of-fold predictions for future ensemble search, saves tuning results locally, and evaluates the best tuned model on the held-out test set.
 
+The LightGBM tuning workflow follows the same prepared data and configured feature set structure, runs Optuna with K-fold cross-validation, stores out-of-fold predictions for future ensemble search, and saves tuning results locally.
+
 The project supports California Housing and Diabetes datasets. For California Housing, capped target values are removed before splitting.
 
-Future updates will add additional model families, ensemble search, and regression performance comparison.
+Future updates will add ElasticNet tuning, LightGBM and ElasticNet evaluation on the test set, ensemble search, and regression performance comparison.
 
 ## Project Structure
 
 `main.py` — data preparation pipeline\
 `run_xgboost_optuna.py` — XGBoost Optuna tuning workflow\
+`run_lightgbm_optuna.py` — LightGBM Optuna tuning workflow\
 `evaluate_xgboost.py` — XGBoost evaluation on the test set\
 `config.py` — project settings and user-configurable parameters\
 `environment.py` — numerical library thread settings for improved reproducibility\
@@ -33,6 +36,7 @@ Future updates will add additional model families, ensemble search, and regressi
 `tuning/validation.py` — shared validation helpers for feature and target arrays\
 `tuning/result_storage.py` — saving and loading Optuna result artifacts\
 `tuning/xgboost_optuna.py` — XGBoost Optuna tuning logic\
+`tuning/lightgbm_optuna.py` — LightGBM Optuna tuning logic\
 `requirements.txt` — Python package dependencies
 
 ## How It Works
@@ -62,9 +66,19 @@ The XGBoost Optuna tuning workflow:
 * stores one out-of-fold prediction column per Optuna trial
 * saves the completed Optuna study, trial numbers, out-of-fold predictions, RMSE values, and hyperparameters
 
+The LightGBM Optuna tuning workflow:
+
+* loads prepared data for the selected dataset
+* chooses the configured feature set
+* runs LightGBM hyperparameter tuning with Optuna
+* uses K-fold cross-validation on the development set
+* stores one out-of-fold prediction column per Optuna trial
+* saves the completed Optuna study, trial numbers, out-of-fold predictions, RMSE values, and hyperparameters
+
 Generated Optuna artifacts are saved locally in model-specific subfolders, such as:
 
-`optuna_results/california_housing/original_scaled/xgboost/`
+`optuna_results/california_housing/original_scaled/xgboost/`\
+`optuna_results/california_housing/original_scaled/lightgbm/`
 
 The XGBoost test evaluation workflow:
 
@@ -91,13 +105,19 @@ Next, run XGBoost Optuna tuning:
 
 `python run_xgboost_optuna.py`
 
-The tuning script loads the prepared development data, runs Optuna-based XGBoost tuning, and saves results into `optuna_results/`.
+The XGBoost tuning script loads the prepared development data, runs Optuna-based XGBoost tuning, and saves results into `optuna_results/`.
 
-Finally, evaluate the best tuned XGBoost model on the test set:
+Also run LightGBM Optuna tuning:
+
+`python run_lightgbm_optuna.py`
+
+The LightGBM tuning script loads the prepared development data, runs Optuna-based LightGBM tuning, and saves results into `optuna_results/`.
+
+To evaluate the best tuned XGBoost model on the test set, run:
 
 `python evaluate_xgboost.py`
 
-The evaluation script loads the saved Optuna study, retrains the best XGBoost model on the full development set, evaluates it on the held-out test set, and prints the test RMSE.
+The evaluation script loads the saved XGBoost Optuna study, retrains the best XGBoost model on the full development set, evaluates it on the held-out test set, and prints the test RMSE.
 
 ## Configuration
 
@@ -120,8 +140,20 @@ Important XGBoost Optuna settings are:
 `XGBOOST_N_ESTIMATORS_MIN` — minimum number of XGBoost estimators considered by Optuna\
 `XGBOOST_N_ESTIMATORS_MAX` — maximum number of XGBoost estimators considered by Optuna\
 `XGBOOST_N_ESTIMATORS_STEP` — step size for the Optuna search over estimators\
-`XGBOOST_VERBOSE` — whether to print trial-level RMSE values\
-`OPTUNA_RESULTS_DIR` — root output folder for Optuna result artifacts
+`XGBOOST_VERBOSE` — whether to print trial-level RMSE values
+
+Important LightGBM Optuna settings are:
+
+`LIGHTGBM_FEATURE_SET` — selected feature set for LightGBM tuning\
+`LIGHTGBM_N_TRIALS` — number of Optuna trials\
+`LIGHTGBM_N_JOBS` — number of parallel Optuna workers\
+`LIGHTGBM_N_SPLITS` — number of K-fold cross-validation splits\
+`LIGHTGBM_N_ESTIMATORS_MIN` — minimum number of LightGBM estimators considered by Optuna\
+`LIGHTGBM_N_ESTIMATORS_MAX` — maximum number of LightGBM estimators considered by Optuna\
+`LIGHTGBM_N_ESTIMATORS_STEP` — step size for the Optuna search over estimators\
+`LIGHTGBM_VERBOSE` — whether to print trial-level RMSE values
+
+`OPTUNA_RESULTS_DIR` represents the root output folder for Optuna result artifacts.
 
 The currently supported datasets are:
 
@@ -153,6 +185,16 @@ The final out-of-fold prediction matrix has one column per trial and is saved fo
 
 The test set is not used during Optuna tuning. After tuning is complete, the best saved XGBoost configuration can be retrained on the full development set and evaluated once on the held-out test set using `evaluate_xgboost.py`.
 
+## LightGBM Optuna Tuning
+
+The LightGBM tuning workflow uses Optuna to search over LightGBM hyperparameters, including the number of estimators.
+
+Each Optuna trial trains one LightGBM configuration across all K folds and produces one full out-of-fold prediction vector for the development set.
+
+The final out-of-fold prediction matrix has one column per trial and is saved for future ensemble search.
+
+The test set is not used during LightGBM tuning.
+
 ## XGBoost Test Evaluation
 
 The XGBoost test evaluation workflow loads the saved Optuna study for the configured dataset and feature set.
@@ -169,7 +211,7 @@ The project limits hidden parallelism in numerical libraries through `environmen
 
 For stricter reproducibility, `PYTHONHASHSEED` can be set before launching Python.
 
-Optuna tuning uses a seeded sampler, seeded K-fold splitting, and seeded XGBoost models.
+Optuna tuning uses a seeded sampler, seeded K-fold splitting, and seeded XGBoost and LightGBM models.
 
 ## Generated Files
 
@@ -187,7 +229,6 @@ These files are ignored by Git because they are generated artifacts rather than 
 
 Future updates may add:
 
-* LightGBM Optuna tuning
 * ElasticNet tuning
 * LightGBM and ElasticNet evaluation on the test set
 * ensemble search

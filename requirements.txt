@@ -6,3 +6,4 @@ joblib
 autofeat
 optuna==4.5.0
 xgboost==3.0.2
+lightgbm==4.6.0

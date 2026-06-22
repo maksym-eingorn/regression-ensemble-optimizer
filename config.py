@@ -38,6 +38,20 @@ XGBOOST_N_ESTIMATORS_MAX = 1000
 XGBOOST_N_ESTIMATORS_STEP = 50
 XGBOOST_VERBOSE = True
 
+# --- LightGBM Optuna tuning ---
+
+# Supported feature sets:
+# "original", "original_scaled", "autofeat", "autofeat_scaled"
+LIGHTGBM_FEATURE_SET = "original_scaled"
+
+LIGHTGBM_N_TRIALS = 1000
+LIGHTGBM_N_JOBS = 1
+LIGHTGBM_N_SPLITS = 5
+LIGHTGBM_N_ESTIMATORS_MIN = 100
+LIGHTGBM_N_ESTIMATORS_MAX = 1000
+LIGHTGBM_N_ESTIMATORS_STEP = 50
+LIGHTGBM_VERBOSE = True
+
 # --- Output paths ---
 
 PREPARED_DATA_DIR = "prepared_data"
