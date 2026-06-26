@@ -52,6 +52,19 @@ LIGHTGBM_N_ESTIMATORS_MAX = 1000
 LIGHTGBM_N_ESTIMATORS_STEP = 50
 LIGHTGBM_VERBOSE = True
 
+# --- ElasticNet Optuna tuning ---
+
+# Supported feature sets:
+# "original", "original_scaled", "autofeat", "autofeat_scaled"
+ELASTICNET_FEATURE_SET = "autofeat_scaled"
+
+ELASTICNET_N_TRIALS = 100
+ELASTICNET_N_JOBS = 1
+ELASTICNET_N_SPLITS = 5
+ELASTICNET_MAX_ITER = 20000
+ELASTICNET_TOL = 1e-4
+ELASTICNET_VERBOSE = True
+
 # --- Output paths ---
 
 PREPARED_DATA_DIR = "prepared_data"

@@ -4,23 +4,25 @@ A modular Python machine learning project for building a regression ensemble opt
 
 ## Overview
 
-The current version implements data preparation for supported regression datasets, XGBoost and LightGBM hyperparameter tuning with Optuna, and final XGBoost and LightGBM evaluation on the test set.
+The current version implements data preparation for supported regression datasets, XGBoost, LightGBM, and ElasticNet hyperparameter tuning with Optuna, and final XGBoost, LightGBM, and ElasticNet evaluation on the test set.
 
 The data preparation pipeline includes dataset loading, development/test splitting, feature scaling, optional AutoFeat feature engineering, and saving prepared arrays and fitted preprocessing objects.
 
-The XGBoost and LightGBM workflows load prepared development data, select the configured feature set, run Optuna with K-fold cross-validation, store out-of-fold predictions for future ensemble search, save tuning results locally, and evaluate the best tuned models on the held-out test set.
+The XGBoost, LightGBM, and ElasticNet workflows load prepared development data, select the configured feature set, run Optuna with K-fold cross-validation, store out-of-fold predictions for future ensemble search, save tuning results locally, and evaluate the best tuned models on the held-out test set.
 
 The project supports California Housing and Diabetes datasets. For California Housing, capped target values are removed before splitting.
 
-Future updates will add ElasticNet tuning, ElasticNet evaluation on the test set, ensemble search, and regression performance comparison.
+Future updates will add ensemble search and regression performance comparison.
 
 ## Project Structure
 
 `main.py` — data preparation pipeline\
 `run_xgboost_optuna.py` — XGBoost Optuna tuning workflow\
 `run_lightgbm_optuna.py` — LightGBM Optuna tuning workflow\
+`run_elasticnet_optuna.py` — ElasticNet Optuna tuning workflow\
 `evaluate_xgboost.py` — XGBoost evaluation on the test set\
 `evaluate_lightgbm.py` — LightGBM evaluation on the test set\
+`evaluate_elasticnet.py` — ElasticNet evaluation on the test set\
 `config.py` — project settings and user-configurable parameters\
 `environment.py` — numerical library thread settings for improved reproducibility\
 `datasets/loader.py` — dataset dispatcher\
@@ -32,11 +34,13 @@ Future updates will add ElasticNet tuning, ElasticNet evaluation on the test set
 `evaluation/validation.py` — validation helpers for final model evaluation\
 `evaluation/xgboost_evaluation.py` — XGBoost retraining on the full development set and RMSE evaluation on the test set\
 `evaluation/lightgbm_evaluation.py` — LightGBM retraining on the full development set and RMSE evaluation on the test set\
+`evaluation/elasticnet_evaluation.py` — ElasticNet retraining on the full development set and RMSE evaluation on the test set\
 `tuning/feature_sets.py` — feature set selection for tuning and evaluation workflows\
 `tuning/validation.py` — shared validation helpers for feature and target arrays\
 `tuning/result_storage.py` — saving and loading Optuna result artifacts\
 `tuning/xgboost_optuna.py` — XGBoost Optuna tuning logic\
 `tuning/lightgbm_optuna.py` — LightGBM Optuna tuning logic\
+`tuning/elasticnet_optuna.py` — ElasticNet Optuna tuning logic\
 `requirements.txt` — Python package dependencies
 
 ## How It Works
@@ -57,7 +61,7 @@ Generated data artifacts are saved locally in dataset-specific subfolders:
 `prepared_data/california_housing/`\
 `prepared_data/diabetes/`
 
-The XGBoost and LightGBM Optuna tuning workflows:
+The XGBoost, LightGBM, and ElasticNet Optuna tuning workflows:
 
 * load prepared data for the selected dataset
 * choose the configured feature set
@@ -69,9 +73,10 @@ The XGBoost and LightGBM Optuna tuning workflows:
 Generated Optuna artifacts are saved locally in model-specific subfolders, such as:
 
 `optuna_results/california_housing/original_scaled/xgboost/`\
-`optuna_results/california_housing/original_scaled/lightgbm/`
+`optuna_results/california_housing/original_scaled/lightgbm/`\
+`optuna_results/california_housing/autofeat_scaled/elasticnet/`
 
-The XGBoost and LightGBM test evaluation workflows:
+The XGBoost, LightGBM, and ElasticNet test evaluation workflows:
 
 * load the prepared development and test data for the selected dataset
 * choose the same configured feature set used during tuning
@@ -104,6 +109,12 @@ Also run LightGBM Optuna tuning:
 
 The LightGBM tuning script loads the prepared development data, runs Optuna-based LightGBM tuning, and saves results into `optuna_results/`.
 
+In addition, run ElasticNet Optuna tuning:
+
+`python run_elasticnet_optuna.py`
+
+The ElasticNet tuning script loads the prepared development data, runs Optuna-based ElasticNet tuning, and saves results into `optuna_results/`.
+
 To evaluate the best tuned XGBoost model on the test set, run:
 
 `python evaluate_xgboost.py`
@@ -111,6 +122,10 @@ To evaluate the best tuned XGBoost model on the test set, run:
 To evaluate the best tuned LightGBM model on the test set, run:
 
 `python evaluate_lightgbm.py`
+
+To evaluate the best tuned ElasticNet model on the test set, run:
+
+`python evaluate_elasticnet.py`
 
 Each evaluation script loads the saved model-specific Optuna study, retrains the best model on the full development set, evaluates it on the held-out test set, and prints the test RMSE.
 
@@ -128,16 +143,24 @@ Important data preparation settings include:
 
 Important model-specific Optuna settings are grouped by model family.
 
-For XGBoost, the settings use the `XGBOOST_` prefix. For LightGBM, the settings use the `LIGHTGBM_` prefix.
+For XGBoost, the settings use the `XGBOOST_` prefix. For LightGBM, the settings use the `LIGHTGBM_` prefix. For ElasticNet, the settings use the `ELASTICNET_` prefix.
 
-`XGBOOST_FEATURE_SET` / `LIGHTGBM_FEATURE_SET` — selected feature set for tuning and evaluation\
-`XGBOOST_N_TRIALS` / `LIGHTGBM_N_TRIALS` — number of Optuna trials\
-`XGBOOST_N_JOBS` / `LIGHTGBM_N_JOBS` — number of parallel Optuna workers\
-`XGBOOST_N_SPLITS` / `LIGHTGBM_N_SPLITS` — number of K-fold cross-validation splits\
+`XGBOOST_FEATURE_SET` / `LIGHTGBM_FEATURE_SET` / `ELASTICNET_FEATURE_SET` — selected feature set for tuning and evaluation\
+`XGBOOST_N_TRIALS` / `LIGHTGBM_N_TRIALS` / `ELASTICNET_N_TRIALS` — number of Optuna trials\
+`XGBOOST_N_JOBS` / `LIGHTGBM_N_JOBS` / `ELASTICNET_N_JOBS` — number of parallel Optuna workers\
+`XGBOOST_N_SPLITS` / `LIGHTGBM_N_SPLITS` / `ELASTICNET_N_SPLITS` — number of K-fold cross-validation splits\
+`XGBOOST_VERBOSE` / `LIGHTGBM_VERBOSE` / `ELASTICNET_VERBOSE` — whether to print trial-level RMSE values
+
+Important tree-model estimator settings are:
+
 `XGBOOST_N_ESTIMATORS_MIN` / `LIGHTGBM_N_ESTIMATORS_MIN` — minimum number of estimators considered by Optuna\
 `XGBOOST_N_ESTIMATORS_MAX` / `LIGHTGBM_N_ESTIMATORS_MAX` — maximum number of estimators considered by Optuna\
-`XGBOOST_N_ESTIMATORS_STEP` / `LIGHTGBM_N_ESTIMATORS_STEP` — step size for the Optuna search over estimators\
-`XGBOOST_VERBOSE` / `LIGHTGBM_VERBOSE` — whether to print trial-level RMSE values
+`XGBOOST_N_ESTIMATORS_STEP` / `LIGHTGBM_N_ESTIMATORS_STEP` — step size for the Optuna search over estimators
+
+Important ElasticNet optimization settings are:
+
+`ELASTICNET_MAX_ITER` — maximum number of ElasticNet optimization iterations\
+`ELASTICNET_TOL` — optimization tolerance for ElasticNet
 
 `OPTUNA_RESULTS_DIR` represents the root output folder for Optuna result artifacts.
 
@@ -159,11 +182,13 @@ If `USE_AUTOFEAT = True`, the pipeline fits AutoFeat on the development set and 
 
 AutoFeat is fit only on the development set to avoid test data leakage.
 
+The default ElasticNet configuration uses the `autofeat_scaled` feature set, so AutoFeat-generated outputs must be available before running ElasticNet Optuna tuning and test evaluation.
+
 If `USE_AUTOFEAT = False`, the pipeline skips AutoFeat and saves only the original and scaled original feature matrices.
 
-## XGBoost and LightGBM Optuna Tuning
+## XGBoost, LightGBM, and ElasticNet Optuna Tuning
 
-The XGBoost and LightGBM tuning workflows use Optuna to search over model-specific hyperparameters, including the number of estimators.
+The XGBoost, LightGBM, and ElasticNet tuning workflows use Optuna to search over model-specific hyperparameters.
 
 Each Optuna trial trains one model configuration across all K folds and produces one full out-of-fold prediction vector for the development set.
 
@@ -171,7 +196,7 @@ The final out-of-fold prediction matrix has one column per trial and is saved fo
 
 The test set is not used during Optuna tuning. After tuning is complete, the best saved configuration for each model family can be retrained on the full development set and evaluated once on the held-out test set.
 
-## XGBoost and LightGBM Test Evaluation
+## XGBoost, LightGBM, and ElasticNet Test Evaluation
 
 The test evaluation workflows load the saved Optuna study for the configured dataset, feature set, and model family.
 
@@ -187,7 +212,7 @@ The project limits hidden parallelism in numerical libraries through `environmen
 
 For stricter reproducibility, `PYTHONHASHSEED` can be set before launching Python.
 
-Optuna tuning uses a seeded sampler, seeded K-fold splitting, and seeded XGBoost and LightGBM models.
+Optuna tuning uses a seeded sampler, seeded K-fold splitting, and seeded XGBoost, LightGBM, and ElasticNet models.
 
 ## Generated Files
 
@@ -205,8 +230,6 @@ These files are ignored by Git because they are generated artifacts rather than 
 
 Future updates may add:
 
-* ElasticNet tuning
-* ElasticNet evaluation on the test set
 * ensemble search
 * regression metrics and model comparison
 
