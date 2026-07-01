@@ -4,15 +4,15 @@ A modular Python machine learning project for building a regression ensemble opt
 
 ## Overview
 
-The current version implements data preparation for supported regression datasets, XGBoost, LightGBM, and ElasticNet hyperparameter tuning with Optuna, and final XGBoost, LightGBM, and ElasticNet evaluation on the test set.
+The current version implements data preparation for supported regression datasets, XGBoost, LightGBM, and ElasticNet hyperparameter tuning with Optuna, final individual model evaluation on the held-out test set, exact OLS-weighted triplet ensemble search, and triplet ensemble evaluation on the held-out test set.
 
 The data preparation pipeline includes dataset loading, development/test splitting, feature scaling, optional AutoFeat feature engineering, and saving prepared arrays and fitted preprocessing objects.
 
-The XGBoost, LightGBM, and ElasticNet workflows load prepared development data, select the configured feature set, run Optuna with K-fold cross-validation, store out-of-fold predictions for future ensemble search, save tuning results locally, and evaluate the best tuned models on the held-out test set.
+The XGBoost, LightGBM, and ElasticNet workflows load prepared development data, select the configured feature set, run Optuna with K-fold cross-validation, store out-of-fold predictions for ensemble search, save tuning results locally, and evaluate the best tuned individual models on the held-out test set.
+
+The triplet ensemble workflow combines saved out-of-fold prediction columns from configured model families, runs exact exhaustive triplet search with unconstrained OLS weights, saves the top OOF-ranked triplets, and evaluates the saved triplet ensembles on the held-out test set.
 
 The project supports California Housing and Diabetes datasets. For California Housing, capped target values are removed before splitting.
-
-Future updates will add ensemble search and regression performance comparison.
 
 ## Project Structure
 
@@ -20,9 +20,11 @@ Future updates will add ensemble search and regression performance comparison.
 `run_xgboost_optuna.py` — XGBoost Optuna tuning workflow\
 `run_lightgbm_optuna.py` — LightGBM Optuna tuning workflow\
 `run_elasticnet_optuna.py` — ElasticNet Optuna tuning workflow\
+`run_triplet_search.py` — exact OLS-weighted triplet ensemble search workflow\
 `evaluate_xgboost.py` — XGBoost evaluation on the test set\
 `evaluate_lightgbm.py` — LightGBM evaluation on the test set\
 `evaluate_elasticnet.py` — ElasticNet evaluation on the test set\
+`evaluate_triplet_ensembles.py` — saved triplet ensemble evaluation on the test set\
 `config.py` — project settings and user-configurable parameters\
 `environment.py` — numerical library thread settings for improved reproducibility\
 `datasets/loader.py` — dataset dispatcher\
@@ -31,16 +33,21 @@ Future updates will add ensemble search and regression performance comparison.
 `preprocessing.py` — development/test splitting and standard feature scaling\
 `feature_engineering.py` — optional AutoFeat feature engineering and scaling\
 `storage.py` — saving and loading prepared NumPy arrays and fitted preprocessing objects\
+`ensemble/oof_matrix.py` — construction of a unified out-of-fold prediction matrix\
+`ensemble/triplet_search.py` — Python wrapper for the native triplet search extension\
 `evaluation/validation.py` — validation helpers for final model evaluation\
 `evaluation/xgboost_evaluation.py` — XGBoost retraining on the full development set and RMSE evaluation on the test set\
 `evaluation/lightgbm_evaluation.py` — LightGBM retraining on the full development set and RMSE evaluation on the test set\
 `evaluation/elasticnet_evaluation.py` — ElasticNet retraining on the full development set and RMSE evaluation on the test set\
+`evaluation/ensemble_evaluation.py` — triplet ensemble retraining on the full development set and RMSE evaluation on the test set\
 `tuning/feature_sets.py` — feature set selection for tuning and evaluation workflows\
 `tuning/validation.py` — shared validation helpers for feature and target arrays\
 `tuning/result_storage.py` — saving and loading Optuna result artifacts\
 `tuning/xgboost_optuna.py` — XGBoost Optuna tuning logic\
 `tuning/lightgbm_optuna.py` — LightGBM Optuna tuning logic\
 `tuning/elasticnet_optuna.py` — ElasticNet Optuna tuning logic\
+`native/triplet_search.cpp` — C++/OpenMP implementation of exact exhaustive triplet search\
+`setup_triplet_search.py` — build script for the native triplet search extension\
 `requirements.txt` — Python package dependencies
 
 ## How It Works
@@ -76,7 +83,7 @@ Generated Optuna artifacts are saved locally in model-specific subfolders, such 
 `optuna_results/california_housing/original_scaled/lightgbm/`\
 `optuna_results/california_housing/autofeat_scaled/elasticnet/`
 
-The XGBoost, LightGBM, and ElasticNet test evaluation workflows:
+The individual model test evaluation workflows:
 
 * load the prepared development and test data for the selected dataset
 * choose the same configured feature set used during tuning
@@ -84,6 +91,26 @@ The XGBoost, LightGBM, and ElasticNet test evaluation workflows:
 * retrain the best model on the full development set
 * evaluate the retrained model on the held-out test set
 * print the final test RMSE
+
+The triplet ensemble search workflow:
+
+* loads saved out-of-fold predictions from the configured model families
+* builds one unified out-of-fold prediction matrix
+* searches all 3-model combinations exactly
+* fits unconstrained OLS weights for each triplet on development set out-of-fold predictions
+* ranks triplets by OOF RMSE
+* saves the top OOF-ranked triplet metadata and out-of-fold predictions
+
+Generated ensemble search artifacts are saved locally within `ensemble_results/`.
+
+The triplet ensemble test evaluation workflow:
+
+* loads the saved OOF-ranked triplet metadata
+* retrains the selected base models on the full development set
+* combines their test predictions using the saved OLS weights
+* evaluates the saved triplet ensembles on the held-out test set
+* saves triplet test metadata and triplet test predictions
+* prints the best OOF-ranked triplet and a diagnostic best-by-test summary among the saved top-N triplets
 
 ## How to Run
 
@@ -127,7 +154,25 @@ To evaluate the best tuned ElasticNet model on the test set, run:
 
 `python evaluate_elasticnet.py`
 
-Each evaluation script loads the saved model-specific Optuna study, retrains the best model on the full development set, evaluates it on the held-out test set, and prints the test RMSE.
+Each individual model evaluation script loads the saved model-specific Optuna study, retrains the best model on the full development set, evaluates it on the held-out test set, and prints the test RMSE.
+
+Before running triplet ensemble search, build the native C++ extension:
+
+`python setup_triplet_search.py build_ext --inplace`
+
+The native extension requires Eigen. If Eigen is not located in the default path expected by the build script, set the `EIGEN_INCLUDE_DIR` environment variable to the Eigen folder before building.
+
+Then run exact OLS-weighted triplet ensemble search:
+
+`python run_triplet_search.py`
+
+The triplet search script loads saved Optuna out-of-fold predictions, builds a unified out-of-fold matrix, runs exact exhaustive triplet search, and saves the top OOF-ranked triplet results into `ensemble_results/`.
+
+Finally, evaluate the saved triplet ensembles on the held-out test set:
+
+`python evaluate_triplet_ensembles.py`
+
+The triplet evaluation script retrains the selected base models on the full development set, combines their test predictions using the saved OLS weights, evaluates the triplets on the held-out test set, and saves the resulting test artifacts into `ensemble_results/`.
 
 ## Configuration
 
@@ -162,7 +207,16 @@ Important ElasticNet optimization settings are:
 `ELASTICNET_MAX_ITER` — maximum number of ElasticNet optimization iterations\
 `ELASTICNET_TOL` — optimization tolerance for ElasticNet
 
+Important triplet ensemble search settings are:
+
+`TRIPLET_TOP_N` — number of top OOF-ranked triplets to save\
+`TRIPLET_N_THREADS` — number of OpenMP threads used by the native triplet search
+
 `OPTUNA_RESULTS_DIR` represents the root output folder for Optuna result artifacts.
+
+`ENSEMBLE_RESULTS_DIR` represents the root output folder for ensemble search and ensemble evaluation artifacts.
+
+The native triplet search build requires Eigen. By default, the build script looks for Eigen at `C:\Libraries\eigen-3.4.1`. If Eigen is installed elsewhere, set the `EIGEN_INCLUDE_DIR` environment variable to the Eigen folder before building.
 
 The currently supported datasets are:
 
@@ -192,19 +246,44 @@ The XGBoost, LightGBM, and ElasticNet tuning workflows use Optuna to search over
 
 Each Optuna trial trains one model configuration across all K folds and produces one full out-of-fold prediction vector for the development set.
 
-The final out-of-fold prediction matrix has one column per trial and is saved for future ensemble search.
+The final out-of-fold prediction matrix for each model family has one column per trial and is saved for triplet ensemble search.
 
 The test set is not used during Optuna tuning. After tuning is complete, the best saved configuration for each model family can be retrained on the full development set and evaluated once on the held-out test set.
 
 ## XGBoost, LightGBM, and ElasticNet Test Evaluation
 
-The test evaluation workflows load the saved Optuna study for the configured dataset, feature set, and model family.
+The individual model test evaluation workflows load the saved Optuna study for the configured dataset, feature set, and model family.
 
 The best hyperparameters from the corresponding Optuna study are used to retrain a final model on the full development set.
 
 The retrained model is then evaluated on the held-out test set, and the final test RMSE is printed.
 
-This keeps the test set separate from hyperparameter tuning and uses it only for final model evaluation.
+This keeps the test set separate from hyperparameter tuning and uses it only for final individual model evaluation.
+
+## Triplet Ensemble Search
+
+The triplet ensemble search workflow uses saved out-of-fold predictions from the configured XGBoost, LightGBM, and ElasticNet Optuna runs.
+
+It builds a unified out-of-fold prediction matrix where each column corresponds to one saved Optuna trial. It then performs exact exhaustive search over all 3-column combinations. For each triplet, unconstrained OLS weights are fitted on the development set out-of-fold predictions, and the triplet is ranked by full vector OOF RMSE.
+
+The test set is not used during the triplet search.
+
+Triplet search artifacts are saved within `ensemble_results/` and include:
+
+* `base_model_column_metadata.pkl`
+* `triplet_oof_metadata.pkl`
+* `triplet_oof_predictions.pkl`
+
+## Triplet Ensemble Test Evaluation
+
+The triplet ensemble test evaluation workflow loads the saved triplets, retrains the selected base models on the full development set, combines their test predictions using the saved OLS weights, and evaluates each triplet ensemble on the held-out test set.
+
+The script reports the best OOF-ranked triplet and also prints the lowest test RMSE among the saved top-N triplets as diagnostic information only. The test set should not be used to choose the final model selection rule.
+
+Triplet test artifacts are saved within `ensemble_results/` and include:
+
+* `triplet_test_metadata.pkl`
+* `triplet_test_predictions.pkl`
 
 ## Reproducibility
 
@@ -214,6 +293,8 @@ For stricter reproducibility, `PYTHONHASHSEED` can be set before launching Pytho
 
 Optuna tuning uses a seeded sampler, seeded K-fold splitting, and seeded XGBoost, LightGBM, and ElasticNet models.
 
+The native triplet search uses OpenMP for parallel exhaustive search. Its thread count is controlled by `TRIPLET_N_THREADS`.
+
 ## Generated Files
 
 The pipeline may generate files such as:
@@ -221,17 +302,14 @@ The pipeline may generate files such as:
 * `.npy` prepared arrays
 * `.pkl` fitted preprocessing objects
 * `.pkl` Optuna studies and result artifacts
+* `.pkl` ensemble search and ensemble evaluation artifacts
+* compiled native extension files
 * the `prepared_data/` directory
 * the `optuna_results/` directory
+* the `ensemble_results/` directory
+* the `build/` directory
 
 These files are ignored by Git because they are generated artifacts rather than source code.
-
-## Planned Future Extensions
-
-Future updates may add:
-
-* ensemble search
-* regression metrics and model comparison
 
 ## Why This Project
 
@@ -245,6 +323,8 @@ It emphasizes:
 * configurable feature set selection
 * Optuna-based hyperparameter tuning
 * K-fold out-of-fold prediction generation
+* exact exhaustive ensemble search over saved out-of-fold predictions
+* native C++/OpenMP acceleration for combinatorial triplet search
 * final evaluation on the held-out test set
-* clean separation of dataset loading, preprocessing, feature engineering, tuning, evaluation, and storage
+* clean separation of dataset loading, preprocessing, feature engineering, tuning, ensemble search, evaluation, and storage
 * a scalable structure for future model comparison and ensemble optimization

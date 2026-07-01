@@ -1,5 +1,7 @@
 # config.py
 
+import os
+
 # --- General settings ---
 
 RANDOM_SEED = 42
@@ -65,7 +67,17 @@ ELASTICNET_MAX_ITER = 20000
 ELASTICNET_TOL = 1e-4
 ELASTICNET_VERBOSE = True
 
+# --- Triplet ensemble search ---
+
+TRIPLET_TOP_N = 1000
+
+# Use all available logical CPU cores except one for the native C++/OpenMP
+# triplet search. The C++ RAII guard applies this only during the search call
+# and then restores the previous OpenMP thread setting.
+TRIPLET_N_THREADS = max(1, (os.cpu_count() or 2) - 1)
+
 # --- Output paths ---
 
 PREPARED_DATA_DIR = "prepared_data"
 OPTUNA_RESULTS_DIR = "optuna_results"
+ENSEMBLE_RESULTS_DIR = "ensemble_results"
