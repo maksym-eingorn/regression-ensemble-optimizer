@@ -15,7 +15,8 @@ class OOFResultBlock:
     feature_set: str
     trial_numbers: np.ndarray
     oof_predictions: np.ndarray
-    rmses: np.ndarray
+    oof_rmses: np.ndarray
+    fold_rmses: np.ndarray
     hyperparams: list[dict[str, object]]
 
 
@@ -36,7 +37,8 @@ def load_oof_result_block(
         feature_set=feature_set,
         trial_numbers=np.asarray(results["trial_numbers"]),
         oof_predictions=np.asarray(results["oof_predictions"]),
-        rmses=np.asarray(results["rmses"]),
+        oof_rmses=np.asarray(results["oof_rmses"]),
+        fold_rmses=np.asarray(results["fold_rmses"]),
         hyperparams=hyperparams
     )
 
@@ -93,10 +95,24 @@ def build_oof_matrix(
                 f"{n_trials}, got {len(block.trial_numbers)}."
             )
 
-        if len(block.rmses) != n_trials:
+        if len(block.oof_rmses) != n_trials:
             raise ValueError(
-                f"RMSE values for {block.model_name} must have length "
-                f"{n_trials}, got {len(block.rmses)}."
+                f"OOF RMSE values for {block.model_name} must have length "
+                f"{n_trials}, got {len(block.oof_rmses)}."
+            )
+
+        fold_rmses = np.asarray(block.fold_rmses)
+
+        if fold_rmses.ndim != 2:
+            raise ValueError(
+                f"Fold RMSE values for {block.model_name} must be 2D, "
+                f"got {fold_rmses.ndim}D."
+            )
+
+        if fold_rmses.shape[0] != n_trials:
+            raise ValueError(
+                f"Fold RMSE values for {block.model_name} must have "
+                f"{n_trials} rows, got {fold_rmses.shape[0]}."
             )
 
         if len(block.hyperparams) != n_trials:
@@ -111,7 +127,8 @@ def build_oof_matrix(
                 "model_name": block.model_name,
                 "feature_set": block.feature_set,
                 "trial_number": int(block.trial_numbers[local_column]),
-                "cv_rmse": float(block.rmses[local_column]),
+                "oof_rmse": float(block.oof_rmses[local_column]),
+                "fold_rmses": fold_rmses[local_column].astype(float).tolist(),
                 "hyperparams": block.hyperparams[local_column]
             })
 

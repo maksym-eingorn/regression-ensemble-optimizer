@@ -69,7 +69,12 @@ ELASTICNET_VERBOSE = True
 
 # --- Triplet ensemble search ---
 
-TRIPLET_TOP_N = 1000
+TRIPLET_TOP_N = 10000
+
+# Maximum allowed L1 norm of unrestricted OLS triplet weights.
+# This allows moderate negative weights but rejects high-cancellation triplets.
+# Set to None to disable the guard.
+TRIPLET_WEIGHT_L1_LIMIT = 2.0
 
 # Use all available logical CPU cores except one for the native C++/OpenMP
 # triplet search. The C++ RAII guard applies this only during the search call

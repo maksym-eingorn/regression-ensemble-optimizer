@@ -32,6 +32,7 @@ def run_optuna_kfold_elasticnet(
     np.ndarray,
     np.ndarray,
     np.ndarray,
+    np.ndarray,
     list[dict[str, object]]
 ]:
     """
@@ -64,7 +65,7 @@ def run_optuna_kfold_elasticnet(
         Random seed used by the Optuna sampler, K-fold splitting, and
         ElasticNet.
     verbose : bool, default=False
-        Whether to print the mean cross-validation RMSE for each trial.
+        Whether to print the OOF RMSE for each trial.
 
     Returns
     -------
@@ -76,9 +77,12 @@ def run_optuna_kfold_elasticnet(
     oof_predictions : np.ndarray
         Out-of-fold prediction matrix.
         Shape: (n_samples_dev, n_trials). Each column corresponds to one trial.
-    rmses : np.ndarray
-        Mean cross-validation RMSE for each trial.
+    oof_rmses : np.ndarray
+        OOF RMSE values for each trial.
         Shape: (n_trials,).
+    fold_rmses : np.ndarray
+        Per-fold RMSE values for each trial.
+        Shape: (n_trials, n_splits).
     hyperparams : list[dict[str, object]]
         Hyperparameter dictionary for each trial, ordered by trial number.
     """
@@ -110,7 +114,7 @@ def run_optuna_kfold_elasticnet(
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
 
         oof_pred = np.zeros(len(y_dev), dtype=np.float32)
-        fold_rmses = []
+        per_fold_rmses = []
 
         for train_idx, valid_idx in kf.split(X_dev):
             X_train, X_valid = X_dev[train_idx], X_dev[valid_idx]
@@ -129,16 +133,23 @@ def run_optuna_kfold_elasticnet(
             oof_pred[valid_idx] = y_pred
 
             fold_rmse = math.sqrt(mean_squared_error(y_valid, y_pred))
-            fold_rmses.append(fold_rmse)
+            per_fold_rmses.append(fold_rmse)
 
-        mean_rmse = float(np.mean(fold_rmses))
+        fold_rmses_array = np.array(per_fold_rmses, dtype=float)
+        oof_rmse = math.sqrt(mean_squared_error(y_dev, oof_pred))
 
-        results.append((trial.number, oof_pred.copy(), mean_rmse, params))
+        results.append((
+            trial.number,
+            oof_pred.copy(),
+            oof_rmse,
+            fold_rmses_array,
+            params
+        ))
 
         if verbose:
-            print(f"Trial {trial.number} | mean CV RMSE = {mean_rmse:.5f}")
+            print(f"Trial {trial.number} | OOF RMSE = {oof_rmse:.5f}")
 
-        return mean_rmse
+        return oof_rmse
 
     study.optimize(objective_enet, n_trials=n_trials, n_jobs=n_jobs)
 
@@ -150,8 +161,17 @@ def run_optuna_kfold_elasticnet(
         [item[1] for item in results]
     ).astype(np.float32)
 
-    rmses = np.array([item[2] for item in results], dtype=float)
+    oof_rmses = np.array([item[2] for item in results], dtype=float)
 
-    hyperparams = [item[3] for item in results]
+    fold_rmses = np.vstack([item[3] for item in results]).astype(float)
 
-    return study, trial_numbers, oof_predictions, rmses, hyperparams
+    hyperparams = [item[4] for item in results]
+
+    return (
+        study,
+        trial_numbers,
+        oof_predictions,
+        oof_rmses,
+        fold_rmses,
+        hyperparams
+    )

@@ -70,7 +70,11 @@ def main() -> None:
     P, column_metadata = build_oof_matrix(blocks)
 
     triplet_metadata, triplet_oof_predictions = find_top_triplet_ensembles(
-        P, y_dev, top_n=config.TRIPLET_TOP_N, n_threads=config.TRIPLET_N_THREADS
+        P,
+        y_dev,
+        top_n=config.TRIPLET_TOP_N,
+        n_threads=config.TRIPLET_N_THREADS,
+        weight_l1_limit=config.TRIPLET_WEIGHT_L1_LIMIT
     )
 
     if not triplet_metadata:

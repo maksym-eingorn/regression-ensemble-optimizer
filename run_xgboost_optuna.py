@@ -35,7 +35,8 @@ def main() -> None:
         study_xgb,
         trial_numbers_xgb,
         oof_predictions_xgb,
-        rmses_xgb,
+        oof_rmses_xgb,
+        fold_rmses_xgb,
         hyperparams_xgb,
     ) = run_optuna_kfold_xgboost(
         X_dev,
@@ -51,7 +52,7 @@ def main() -> None:
     )
 
     print(
-        f"\nBest mean CV RMSE = {study_xgb.best_value:.5f} "
+        f"\nBest OOF RMSE = {study_xgb.best_value:.5f} "
         f"(trial {study_xgb.best_trial.number})"
     )
     print(f"Best hyperparameters:\n{study_xgb.best_trial.params}")
@@ -68,7 +69,8 @@ def main() -> None:
         study_xgb,
         trial_numbers_xgb,
         oof_predictions_xgb,
-        rmses_xgb,
+        oof_rmses_xgb,
+        fold_rmses_xgb,
         hyperparams_xgb
     )
 

@@ -53,8 +53,42 @@ def _validate_triplet_search_inputs(
     return P, y
 
 
+def _validate_weight_l1_limit(
+    weight_l1_limit: float | None
+) -> float | None:
+    """Validate the optional triplet weight L1 limit."""
+    if weight_l1_limit is None:
+        return None
+
+    if isinstance(weight_l1_limit, bool):
+        raise ValueError(
+            "weight_l1_limit must be a positive float or None, "
+            f"got {weight_l1_limit}."
+        )
+
+    try:
+        value = float(weight_l1_limit)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "weight_l1_limit must be a positive float or None, "
+            f"got {weight_l1_limit}."
+        ) from exc
+
+    if not np.isfinite(value) or value <= 0:
+        raise ValueError(
+            "weight_l1_limit must be a positive finite float or None, "
+            f"got {weight_l1_limit}."
+        )
+
+    return value
+
+
 def find_top_triplet_ensembles(
-    P, y, top_n: int = 100, n_threads: int = 1
+    P,
+    y,
+    top_n: int = 100,
+    n_threads: int = 1,
+    weight_l1_limit: float | None = None
 ) -> tuple[list[dict[str, object]], np.ndarray]:
     """
     Run exact exhaustive OLS-weighted triplet search using the compiled C++
@@ -69,19 +103,32 @@ def find_top_triplet_ensembles(
         Development target vector.
         Shape: (n_samples_dev,).
     top_n : int, default=100
-        Number of the best triplets to keep.
+        Number of top unguarded triplets requested from the native exhaustive
+        search before optional Python-side filtering. If weight_l1_limit is not
+        None, the final number of kept triplets may be smaller.
     n_threads : int, default=1
         Number of OpenMP threads used by the native search.
+    weight_l1_limit : float | None, default=None
+        Optional maximum allowed L1 norm of the three OLS ensemble weights,
+        defined as abs(wi) + abs(wj) + abs(wk). If None, no weight guard is
+        applied. If a float is provided, triplets whose weight L1 norm exceeds
+        this value are discarded after the native exhaustive search returns its
+        top candidates. This is intended to reject triplets with unusually
+        strong positive-negative weight cancellation.
 
     Returns
     -------
     triplet_metadata : list[dict[str, object]]
-        Metadata for the best triplet ensembles.
+        Metadata for the kept triplet ensembles. If weight_l1_limit is not
+        None, the list contains only triplets passing the L1 weight guard.
+        The reported rank is the post-filtered rank, while unfiltered_rank
+        gives the original rank returned by the native exhaustive search.
     triplet_oof_predictions : np.ndarray
-        Out-of-fold prediction matrix for the best triplet ensembles.
+        Out-of-fold prediction matrix for the kept triplet ensembles.
         Shape: (n_samples_dev, n_kept_triplets).
     """
     P, y = _validate_triplet_search_inputs(P, y, top_n, n_threads)
+    weight_l1_limit = _validate_weight_l1_limit(weight_l1_limit)
 
     native = _load_native_triplet_search_module()
 
@@ -89,20 +136,37 @@ def find_top_triplet_ensembles(
         P, y, top_n, n_threads
     )
 
-    triplet_metadata = []
+    triplet_oof_predictions = np.asarray(triplet_oof_predictions)
 
-    for rank, item in enumerate(raw_metadata, start=1):
+    triplet_metadata = []
+    kept_columns = []
+
+    for unfiltered_rank, item in enumerate(raw_metadata, start=1):
         i, j, k, wi, wj, wk, rmse = item
 
+        weight_l1 = abs(float(wi)) + abs(float(wj)) + abs(float(wk))
+
+        if weight_l1_limit is not None and weight_l1 > weight_l1_limit:
+            continue
+
+        kept_columns.append(unfiltered_rank - 1)
+
         triplet_metadata.append({
-            "rank": rank,
+            "rank": len(triplet_metadata) + 1,
+            "unfiltered_rank": unfiltered_rank,
             "i": int(i),
             "j": int(j),
             "k": int(k),
             "wi": float(wi),
             "wj": float(wj),
             "wk": float(wk),
+            "weight_l1": float(weight_l1),
             "oof_rmse": float(rmse)
         })
 
-    return triplet_metadata, np.asarray(triplet_oof_predictions)
+    if kept_columns:
+        filtered_predictions = triplet_oof_predictions[:, kept_columns]
+    else:
+        filtered_predictions = np.empty((P.shape[0], 0), dtype=np.float64)
+
+    return triplet_metadata, filtered_predictions

@@ -10,7 +10,7 @@ The data preparation pipeline includes dataset loading, development/test splitti
 
 The XGBoost, LightGBM, and ElasticNet workflows load prepared development data, select the configured feature set, run Optuna with K-fold cross-validation, store out-of-fold predictions for ensemble search, save tuning results locally, and evaluate the best tuned individual models on the held-out test set.
 
-The triplet ensemble workflow combines saved out-of-fold prediction columns from configured model families, runs exact exhaustive triplet search with unconstrained OLS weights, saves the top OOF-ranked triplets, and evaluates the saved triplet ensembles on the held-out test set.
+The triplet ensemble workflow combines saved out-of-fold prediction columns from configured model families, runs exact exhaustive triplet search with unconstrained OLS weights, optionally applies an L1 weight guard to discard high-cancellation triplets, saves the retained OOF-ranked triplets, and evaluates the saved triplet ensembles on the held-out test set.
 
 The project supports California Housing and Diabetes datasets. For California Housing, capped target values are removed before splitting.
 
@@ -74,8 +74,9 @@ The XGBoost, LightGBM, and ElasticNet Optuna tuning workflows:
 * choose the configured feature set
 * run model-specific hyperparameter tuning with Optuna
 * use K-fold cross-validation on the development set
+* score each trial by full-vector OOF RMSE
 * store one out-of-fold prediction column per Optuna trial
-* save the completed Optuna study, trial numbers, out-of-fold predictions, RMSE values, and hyperparameters
+* save the completed Optuna study, trial numbers, out-of-fold predictions, OOF RMSE values, per-fold RMSE values, and hyperparameters
 
 Generated Optuna artifacts are saved locally in model-specific subfolders, such as:
 
@@ -99,7 +100,8 @@ The triplet ensemble search workflow:
 * searches all 3-model combinations exactly
 * fits unconstrained OLS weights for each triplet on development set out-of-fold predictions
 * ranks triplets by OOF RMSE
-* saves the top OOF-ranked triplet metadata and out-of-fold predictions
+* optionally applies the configured L1 weight guard to discard high-cancellation triplets
+* saves the retained OOF-ranked triplet metadata and out-of-fold predictions
 
 Generated ensemble search artifacts are saved locally within `ensemble_results/`.
 
@@ -110,7 +112,7 @@ The triplet ensemble test evaluation workflow:
 * combines their test predictions using the saved OLS weights
 * evaluates the saved triplet ensembles on the held-out test set
 * saves triplet test metadata and triplet test predictions
-* prints the best OOF-ranked triplet and a diagnostic best-by-test summary among the saved top-N triplets
+* prints the best OOF-ranked triplet and a diagnostic best-by-test summary among the retained triplets
 
 ## How to Run
 
@@ -166,7 +168,7 @@ Then run exact OLS-weighted triplet ensemble search:
 
 `python run_triplet_search.py`
 
-The triplet search script loads saved Optuna out-of-fold predictions, builds a unified out-of-fold matrix, runs exact exhaustive triplet search, and saves the top OOF-ranked triplet results into `ensemble_results/`.
+The triplet search script loads saved Optuna out-of-fold predictions, builds a unified out-of-fold matrix, runs exact exhaustive triplet search, optionally applies the configured L1 weight guard, and saves the retained OOF-ranked triplet results into `ensemble_results/`.
 
 Finally, evaluate the saved triplet ensembles on the held-out test set:
 
@@ -209,7 +211,8 @@ Important ElasticNet optimization settings are:
 
 Important triplet ensemble search settings are:
 
-`TRIPLET_TOP_N` — number of top OOF-ranked triplets to save\
+`TRIPLET_TOP_N` — number of top unguarded OOF-ranked triplets requested from the native exhaustive search before optional Python-side filtering\
+`TRIPLET_WEIGHT_L1_LIMIT` — optional maximum allowed L1 norm of the three OLS triplet weights; set to `None` to disable the guard\
 `TRIPLET_N_THREADS` — number of OpenMP threads used by the native triplet search
 
 `OPTUNA_RESULTS_DIR` represents the root output folder for Optuna result artifacts.
@@ -244,7 +247,7 @@ If `USE_AUTOFEAT = False`, the pipeline skips AutoFeat and saves only the origin
 
 The XGBoost, LightGBM, and ElasticNet tuning workflows use Optuna to search over model-specific hyperparameters.
 
-Each Optuna trial trains one model configuration across all K folds and produces one full out-of-fold prediction vector for the development set.
+Each Optuna trial trains one model configuration across all K folds and produces one full out-of-fold prediction vector for the development set. Each trial is scored by full-vector OOF RMSE; per-fold RMSE values are saved separately for diagnostics.
 
 The final out-of-fold prediction matrix for each model family has one column per trial and is saved for triplet ensemble search.
 
@@ -264,7 +267,7 @@ This keeps the test set separate from hyperparameter tuning and uses it only for
 
 The triplet ensemble search workflow uses saved out-of-fold predictions from the configured XGBoost, LightGBM, and ElasticNet Optuna runs.
 
-It builds a unified out-of-fold prediction matrix where each column corresponds to one saved Optuna trial. It then performs exact exhaustive search over all 3-column combinations. For each triplet, unconstrained OLS weights are fitted on the development set out-of-fold predictions, and the triplet is ranked by full vector OOF RMSE.
+It builds a unified out-of-fold prediction matrix where each column corresponds to one saved Optuna trial. It then performs exact exhaustive search over all 3-column combinations. For each triplet, unconstrained OLS weights are fitted on the development set out-of-fold predictions, and the triplet is ranked by full-vector OOF RMSE. The native search returns the top unguarded OOF-ranked candidates; if `TRIPLET_WEIGHT_L1_LIMIT` is not `None`, Python-side filtering then discards triplets whose weight L1 norm exceeds the configured limit.
 
 The test set is not used during the triplet search.
 
@@ -278,7 +281,7 @@ Triplet search artifacts are saved within `ensemble_results/` and include:
 
 The triplet ensemble test evaluation workflow loads the saved triplets, retrains the selected base models on the full development set, combines their test predictions using the saved OLS weights, and evaluates each triplet ensemble on the held-out test set.
 
-The script reports the best OOF-ranked triplet and also prints the lowest test RMSE among the saved top-N triplets as diagnostic information only. The test set should not be used to choose the final model selection rule.
+The script reports the best OOF-ranked triplet and also prints the lowest test RMSE among the retained triplets as diagnostic information only. The test set should not be used to choose the final model selection rule.
 
 Triplet test artifacts are saved within `ensemble_results/` and include:
 

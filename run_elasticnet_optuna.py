@@ -35,7 +35,8 @@ def main() -> None:
         study_enet,
         trial_numbers_enet,
         oof_predictions_enet,
-        rmses_enet,
+        oof_rmses_enet,
+        fold_rmses_enet,
         hyperparams_enet,
     ) = run_optuna_kfold_elasticnet(
         X_dev,
@@ -50,7 +51,7 @@ def main() -> None:
     )
 
     print(
-        f"\nBest mean CV RMSE = {study_enet.best_value:.5f} "
+        f"\nBest OOF RMSE = {study_enet.best_value:.5f} "
         f"(trial {study_enet.best_trial.number})"
     )
     print(f"Best hyperparameters:\n{study_enet.best_trial.params}")
@@ -67,7 +68,8 @@ def main() -> None:
         study_enet,
         trial_numbers_enet,
         oof_predictions_enet,
-        rmses_enet,
+        oof_rmses_enet,
+        fold_rmses_enet,
         hyperparams_enet
     )
 

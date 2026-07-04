@@ -110,7 +110,7 @@ def main() -> None:
     )
 
     print(
-        f"Best test triplet among saved top {len(evaluated_metadata)} "
+        f"Best test triplet among saved {len(evaluated_metadata)} "
         f"ensembles (diagnostic only): "
         f"OOF RMSE = {float(best_by_test['oof_rmse']):.5f}, "
         f"test RMSE = {float(best_by_test['test_rmse']):.5f}, "

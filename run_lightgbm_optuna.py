@@ -35,7 +35,8 @@ def main() -> None:
         study_lgb,
         trial_numbers_lgb,
         oof_predictions_lgb,
-        rmses_lgb,
+        oof_rmses_lgb,
+        fold_rmses_lgb,
         hyperparams_lgb,
     ) = run_optuna_kfold_lightgbm(
         X_dev,
@@ -51,7 +52,7 @@ def main() -> None:
     )
 
     print(
-        f"\nBest mean CV RMSE = {study_lgb.best_value:.5f} "
+        f"\nBest OOF RMSE = {study_lgb.best_value:.5f} "
         f"(trial {study_lgb.best_trial.number})"
     )
     print(f"Best hyperparameters:\n{study_lgb.best_trial.params}")
@@ -68,7 +69,8 @@ def main() -> None:
         study_lgb,
         trial_numbers_lgb,
         oof_predictions_lgb,
-        rmses_lgb,
+        oof_rmses_lgb,
+        fold_rmses_lgb,
         hyperparams_lgb
     )
 

@@ -19,10 +19,11 @@ def save_optuna_results(
     study: optuna.study.Study,
     trial_numbers: np.ndarray,
     oof_predictions: np.ndarray,
-    rmses: np.ndarray,
+    oof_rmses: np.ndarray,
+    fold_rmses: np.ndarray,
     hyperparams: list[dict[str, object]]
 ) -> None:
-    """Save Optuna study results and out-of-fold predictions."""
+    """Save Optuna study results and out-of-fold prediction artifacts."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -31,18 +32,20 @@ def save_optuna_results(
     joblib.dump(
         oof_predictions, output_path / "oof_predictions.pkl", compress=3
     )
-    joblib.dump(rmses, output_path / "rmses.pkl", compress=3)
+    joblib.dump(oof_rmses, output_path / "oof_rmses.pkl", compress=3)
+    joblib.dump(fold_rmses, output_path / "fold_rmses.pkl", compress=3)
     joblib.dump(hyperparams, output_path / "hyperparams.pkl", compress=3)
 
 
 def load_optuna_results(output_dir: str | Path) -> dict[str, object]:
-    """Load saved Optuna study results and out-of-fold predictions."""
+    """Load saved Optuna study results and out-of-fold prediction artifacts."""
     output_path = Path(output_dir)
 
     return {
         "study": joblib.load(output_path / "study.pkl"),
         "trial_numbers": joblib.load(output_path / "trial_numbers.pkl"),
         "oof_predictions": joblib.load(output_path / "oof_predictions.pkl"),
-        "rmses": joblib.load(output_path / "rmses.pkl"),
+        "oof_rmses": joblib.load(output_path / "oof_rmses.pkl"),
+        "fold_rmses": joblib.load(output_path / "fold_rmses.pkl"),
         "hyperparams": joblib.load(output_path / "hyperparams.pkl")
     }
