@@ -15,6 +15,7 @@ from tuning.feature_sets import get_development_and_test_data
 
 ModelMetadata = dict[str, object]
 TripletMetadata = dict[str, object]
+GreedyMetadata = dict[str, object]
 
 
 def _build_model_from_metadata(
@@ -23,7 +24,7 @@ def _build_model_from_metadata(
     elasticnet_max_iter: int,
     elasticnet_tol: float
 ):
-    """Build a regression model from saved triplet search column metadata."""
+    """Build a regression model from saved base model column metadata."""
     model_name = cast(str, model_metadata["model_name"])
     hyperparams = dict(cast(dict[str, object], model_metadata["hyperparams"]))
 
@@ -215,3 +216,127 @@ def evaluate_triplet_ensembles_on_test(
     ).astype(np.float32)
 
     return evaluated_metadata, triplet_test_predictions_matrix
+
+
+def _get_greedy_models(greedy_metadata: GreedyMetadata) -> list[ModelMetadata]:
+    """Return selected base model metadata dictionaries for a greedy
+    ensemble."""
+    if "models" not in greedy_metadata:
+        raise KeyError(
+            "Greedy metadata does not contain 'models'. "
+            "Run run_greedy_ensemble_selection.py before test evaluation."
+        )
+
+    models = cast(list[ModelMetadata], greedy_metadata["models"])
+
+    if not models:
+        raise ValueError("Greedy metadata must contain at least one model.")
+
+    return models
+
+
+def _get_greedy_weights(greedy_metadata: GreedyMetadata) -> np.ndarray:
+    """Return convex weights for a greedy ensemble."""
+    if "weights" not in greedy_metadata:
+        raise KeyError("Greedy metadata does not contain 'weights'.")
+
+    weights = np.asarray(greedy_metadata["weights"], dtype=np.float64)
+
+    if weights.ndim != 1:
+        raise ValueError(f"Greedy weights must be 1D, got {weights.ndim}D.")
+
+    if len(weights) == 0:
+        raise ValueError("Greedy weights must contain at least one value.")
+
+    return weights
+
+
+def evaluate_greedy_ensemble_on_test(
+    greedy_metadata: GreedyMetadata,
+    arrays: dict[str, np.ndarray],
+    seed: int = 42,
+    elasticnet_max_iter: int = 20000,
+    elasticnet_tol: float = 1e-4
+) -> tuple[GreedyMetadata, np.ndarray]:
+    """
+    Retrain the selected greedy ensemble on the full development set and
+    evaluate it on the test set.
+
+    Parameters
+    ----------
+    greedy_metadata
+        Metadata saved by run_greedy_ensemble_selection.py.
+    arrays
+        Prepared dataset arrays loaded from storage.
+    seed
+        Random seed used for final model retraining.
+    elasticnet_max_iter
+        Maximum iterations for final ElasticNet retraining.
+    elasticnet_tol
+        Optimization tolerance for final ElasticNet retraining.
+
+    Returns
+    -------
+    evaluated_metadata
+        Copy of greedy metadata with added test_rmse value.
+    greedy_test_predictions
+        Test prediction matrix for the evaluated greedy ensemble.
+        Shape: (n_samples_test, 1).
+    """
+    models = _get_greedy_models(greedy_metadata)
+    weights = _get_greedy_weights(greedy_metadata)
+
+    if len(models) != len(weights):
+        raise ValueError(
+            f"Number of greedy models and weights must match, "
+            f"got {len(models)} != {len(weights)}."
+        )
+
+    prediction_cache: dict[int, np.ndarray] = {}
+    y_test_reference = None
+    y_pred_ensemble = None
+
+    for weight, model_metadata in zip(weights, models):
+        column_index = int(model_metadata["column_index"])
+
+        if column_index not in prediction_cache:
+            y_pred_test, y_test = _predict_base_model_on_test(
+                model_metadata,
+                arrays,
+                seed=seed,
+                elasticnet_max_iter=elasticnet_max_iter,
+                elasticnet_tol=elasticnet_tol
+            )
+
+            prediction_cache[column_index] = y_pred_test
+
+            if y_test_reference is None:
+                y_test_reference = y_test
+            elif not np.array_equal(y_test_reference, y_test):
+                raise ValueError(
+                    "Inconsistent y_test values encountered across feature "
+                    "sets."
+                )
+
+        y_pred_test = prediction_cache[column_index]
+
+        if y_pred_ensemble is None:
+            y_pred_ensemble = weight * y_pred_test
+        else:
+            y_pred_ensemble += weight * y_pred_test
+
+    if y_test_reference is None or y_pred_ensemble is None:
+        raise RuntimeError(
+            "Failed to construct greedy ensemble test predictions."
+        )
+
+    test_rmse = math.sqrt(mean_squared_error(y_test_reference, y_pred_ensemble))
+
+    evaluated_metadata = greedy_metadata.copy()
+    evaluated_metadata["test_rmse"] = float(test_rmse)
+
+    test_predictions_matrix = np.asarray(
+        y_pred_ensemble, dtype=np.float32
+    ).reshape(-1, 1)
+
+    return evaluated_metadata, test_predictions_matrix

@@ -9,7 +9,7 @@ RANDOM_SEED = 42
 # --- Dataset settings ---
 
 # Supported datasets: "california_housing", "diabetes"
-DATASET_NAME = "california_housing"
+DATASET_NAME = "diabetes"
 TEST_SIZE = 0.2
 
 # The California Housing target is measured in units of $100,000.
@@ -80,6 +80,21 @@ TRIPLET_WEIGHT_L1_LIMIT = 2.0
 # triplet search. The C++ RAII guard applies this only during the search call
 # and then restores the previous OpenMP thread setting.
 TRIPLET_N_THREADS = max(1, (os.cpu_count() or 2) - 1)
+
+# --- Greedy ensemble selection ---
+
+# Number of the best individual models considered by greedy selection.
+# Set to None to use the full model zoo.
+GREEDY_POOL_SIZE = None
+
+# Number of greedy selection steps. With repeats enabled, this is the total
+# number of model selections, not necessarily the number of unique models.
+GREEDY_ENSEMBLE_SIZE = 3
+
+# Caruana-style greedy ensemble selection allows the same model to be selected
+# multiple times; final convex weights are selection counts divided by the
+# total number of selections.
+GREEDY_ALLOW_REPEATS = True
 
 # --- Output paths ---
 
