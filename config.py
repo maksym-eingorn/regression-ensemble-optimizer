@@ -6,10 +6,13 @@ import os
 
 RANDOM_SEED = 42
 
+# Controls only the development/test split.
+DATA_SPLIT_SEED = 10
+
 # --- Dataset settings ---
 
 # Supported datasets: "california_housing", "diabetes"
-DATASET_NAME = "diabetes"
+DATASET_NAME = "california_housing"
 TEST_SIZE = 0.2
 
 # The California Housing target is measured in units of $100,000.

@@ -68,10 +68,10 @@ The data preparation pipeline:
 * saves prepared arrays as `.npy` files
 * saves fitted preprocessing objects as `.pkl` files
 
-Generated data artifacts are saved locally in dataset-specific subfolders:
+Generated data artifacts are saved locally in dataset- and split-specific subfolders:
 
-`prepared_data/california_housing/`\
-`prepared_data/diabetes/`
+`prepared_data/california_housing/split_seed_<DATA_SPLIT_SEED>/`\
+`prepared_data/diabetes/split_seed_<DATA_SPLIT_SEED>/`
 
 The XGBoost, LightGBM, and ElasticNet Optuna tuning workflows:
 
@@ -83,11 +83,11 @@ The XGBoost, LightGBM, and ElasticNet Optuna tuning workflows:
 * store one out-of-fold prediction column per Optuna trial
 * save the completed Optuna study, trial numbers, out-of-fold predictions, OOF RMSE values, per-fold RMSE values, and hyperparameters
 
-Generated Optuna artifacts are saved locally in model-specific subfolders, such as:
+Generated Optuna artifacts are saved locally in dataset-, split-, feature-set-, and model-specific subfolders, such as:
 
-`optuna_results/california_housing/original_scaled/xgboost/`\
-`optuna_results/california_housing/original_scaled/lightgbm/`\
-`optuna_results/california_housing/autofeat_scaled/elasticnet/`
+`optuna_results/california_housing/split_seed_<DATA_SPLIT_SEED>/original_scaled/xgboost/`\
+`optuna_results/california_housing/split_seed_<DATA_SPLIT_SEED>/original_scaled/lightgbm/`\
+`optuna_results/california_housing/split_seed_<DATA_SPLIT_SEED>/autofeat_scaled/elasticnet/`
 
 The individual model test evaluation workflows:
 
@@ -118,7 +118,7 @@ The greedy ensemble selection workflow:
 * converts selection counts into convex weights
 * saves the greedy ensemble metadata and out-of-fold predictions
 
-Generated ensemble search artifacts are saved locally within `ensemble_results/`.
+Generated ensemble search artifacts are saved locally within dataset- and split-specific subfolders of `ensemble_results/`.
 
 The triplet ensemble test evaluation workflow:
 
@@ -148,25 +148,25 @@ Then run:
 
 `python main.py`
 
-The script prepares the selected dataset and saves processed outputs into the corresponding dataset-specific subfolder within `prepared_data/`.
+The script prepares the selected dataset and saves processed outputs into the corresponding dataset- and split-specific subfolder within `prepared_data/`.
 
 Next, run XGBoost Optuna tuning:
 
 `python run_xgboost_optuna.py`
 
-The XGBoost tuning script loads the prepared development data, runs Optuna-based XGBoost tuning, and saves results into `optuna_results/`.
+The XGBoost tuning script loads the prepared development data, runs Optuna-based XGBoost tuning, and saves results into the corresponding split-specific subfolder within `optuna_results/`.
 
 Also run LightGBM Optuna tuning:
 
 `python run_lightgbm_optuna.py`
 
-The LightGBM tuning script loads the prepared development data, runs Optuna-based LightGBM tuning, and saves results into `optuna_results/`.
+The LightGBM tuning script loads the prepared development data, runs Optuna-based LightGBM tuning, and saves results into the corresponding split-specific subfolder within `optuna_results/`.
 
 In addition, run ElasticNet Optuna tuning:
 
 `python run_elasticnet_optuna.py`
 
-The ElasticNet tuning script loads the prepared development data, runs Optuna-based ElasticNet tuning, and saves results into `optuna_results/`.
+The ElasticNet tuning script loads the prepared development data, runs Optuna-based ElasticNet tuning, and saves results into the corresponding split-specific subfolder within `optuna_results/`.
 
 To evaluate the best tuned XGBoost model on the test set, run:
 
@@ -192,13 +192,13 @@ Then run exact OLS-weighted triplet ensemble search:
 
 `python run_triplet_search.py`
 
-The triplet search script loads saved Optuna out-of-fold predictions, builds a unified out-of-fold matrix, runs exact exhaustive triplet search, optionally applies the configured L1 weight guard, and saves the retained OOF-ranked triplet results into `ensemble_results/`.
+The triplet search script loads saved Optuna out-of-fold predictions, builds a unified out-of-fold matrix, runs exact exhaustive triplet search, optionally applies the configured L1 weight guard, and saves the retained OOF-ranked triplet results into the corresponding split-specific subfolder within `ensemble_results/`.
 
 Evaluate the saved triplet ensembles on the held-out test set:
 
 `python evaluate_triplet_ensembles.py`
 
-The triplet evaluation script retrains the selected base models on the full development set, combines their test predictions using the saved OLS weights, evaluates the triplets on the held-out test set, and saves the resulting test artifacts into `ensemble_results/`.
+The triplet evaluation script retrains the selected base models on the full development set, combines their test predictions using the saved OLS weights, evaluates the triplets on the held-out test set, and saves the resulting test artifacts into the corresponding split-specific subfolder within `ensemble_results/`.
 
 Also, run Caruana-style greedy ensemble selection:
 
@@ -218,7 +218,8 @@ Important data preparation settings include:
 
 `DATASET_NAME` — selected dataset name\
 `TEST_SIZE` — test set fraction\
-`RANDOM_SEED` — random seed for reproducibility\
+`DATA_SPLIT_SEED` — random seed used only for the development/test split; it also determines the split-specific output subfolder name\
+`RANDOM_SEED` — random seed used for model tuning, K-fold splitting, model training, and other non-split randomness\
 `USE_AUTOFEAT` — whether to apply AutoFeat feature engineering\
 `PREPARED_DATA_DIR` — root output folder for prepared data
 
@@ -311,7 +312,7 @@ It builds a unified out-of-fold prediction matrix where each column corresponds 
 
 The test set is not used during the triplet search.
 
-Triplet search artifacts are saved within `ensemble_results/` and include:
+Triplet search artifacts are saved within the corresponding dataset- and split-specific subfolder of `ensemble_results/` and include:
 
 * `base_model_column_metadata.pkl`
 * `triplet_oof_metadata.pkl`
@@ -325,7 +326,7 @@ It builds the same unified out-of-fold prediction matrix used by triplet search,
 
 The test set is not used during the greedy ensemble selection.
 
-Greedy selection artifacts are saved within `ensemble_results/` and include:
+Greedy selection artifacts are saved within the corresponding dataset- and split-specific subfolder of `ensemble_results/` and include:
 
 * `base_model_column_metadata.pkl`
 * `greedy_oof_metadata.pkl`
@@ -337,7 +338,7 @@ The triplet ensemble test evaluation workflow loads the saved triplets, retrains
 
 The script reports the best OOF-ranked triplet and also prints the lowest test RMSE among the retained triplets as diagnostic information only. The test set should not be used to choose the final model selection rule.
 
-Triplet test artifacts are saved within `ensemble_results/` and include:
+Triplet test artifacts are saved within the corresponding dataset- and split-specific subfolder of `ensemble_results/` and include:
 
 * `triplet_test_metadata.pkl`
 * `triplet_test_predictions.pkl`
@@ -348,7 +349,7 @@ The greedy ensemble test evaluation workflow loads the saved greedy ensemble met
 
 The script reports the greedy ensemble OOF RMSE and test RMSE.
 
-Greedy ensemble test artifacts are saved within `ensemble_results/` and include:
+Greedy ensemble test artifacts are saved within the corresponding dataset- and split-specific subfolder of `ensemble_results/` and include:
 
 * `greedy_test_metadata.pkl`
 * `greedy_test_predictions.pkl`
@@ -360,6 +361,10 @@ The project limits hidden parallelism in numerical libraries through `environmen
 For stricter reproducibility, `PYTHONHASHSEED` can be set before launching Python.
 
 Optuna tuning uses a seeded sampler, seeded K-fold splitting, and seeded XGBoost, LightGBM, and ElasticNet models.
+
+The development/test split is controlled separately by `DATA_SPLIT_SEED`. Changing `DATA_SPLIT_SEED` creates a different held-out split and writes generated artifacts under `split_seed_<DATA_SPLIT_SEED>` subfolders, allowing multiple split experiments for the same dataset without overwriting previous results.
+
+When comparing different data splits, `RANDOM_SEED` should normally remain fixed so that model and tuning randomness are controlled while only the development/test split changes.
 
 The native triplet search uses OpenMP for parallel exhaustive search. Its thread count is controlled by `TRIPLET_N_THREADS`.
 

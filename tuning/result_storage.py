@@ -6,12 +6,22 @@ import joblib
 import numpy as np
 import optuna
 
+from storage import get_dataset_output_dir
+
 
 def get_optuna_result_dir(
-    root_dir: str | Path, dataset_name: str, feature_set: str, model_name: str
+    root_dir: str | Path,
+    dataset_name: str,
+    data_split_seed: int,
+    feature_set: str,
+    model_name: str
 ) -> Path:
     """Return the output directory for Optuna results."""
-    return Path(root_dir) / dataset_name / feature_set / model_name
+    return (
+        get_dataset_output_dir(root_dir, dataset_name, data_split_seed)
+        / feature_set
+        / model_name
+    )
 
 
 def save_optuna_results(

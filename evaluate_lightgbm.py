@@ -20,7 +20,7 @@ from tuning.result_storage import get_optuna_result_dir, load_optuna_results
 def main() -> None:
     """Evaluate the best tuned LightGBM model on the test set."""
     prepared_data_dir = get_dataset_output_dir(
-        config.PREPARED_DATA_DIR, config.DATASET_NAME
+        config.PREPARED_DATA_DIR, config.DATASET_NAME, config.DATA_SPLIT_SEED
     )
 
     include_autofeat = feature_set_requires_autofeat(
@@ -38,6 +38,7 @@ def main() -> None:
     result_dir = get_optuna_result_dir(
         config.OPTUNA_RESULTS_DIR,
         config.DATASET_NAME,
+        config.DATA_SPLIT_SEED,
         config.LIGHTGBM_FEATURE_SET,
         "lightgbm"
     )

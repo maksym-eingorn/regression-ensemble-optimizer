@@ -18,7 +18,7 @@ from tuning.elasticnet_optuna import run_optuna_kfold_elasticnet
 def main() -> None:
     """Run ElasticNet Optuna tuning on the selected prepared dataset."""
     prepared_data_dir = get_dataset_output_dir(
-        config.PREPARED_DATA_DIR, config.DATASET_NAME
+        config.PREPARED_DATA_DIR, config.DATASET_NAME, config.DATA_SPLIT_SEED
     )
 
     include_autofeat = feature_set_requires_autofeat(
@@ -59,6 +59,7 @@ def main() -> None:
     result_dir = get_optuna_result_dir(
         config.OPTUNA_RESULTS_DIR,
         config.DATASET_NAME,
+        config.DATA_SPLIT_SEED,
         config.ELASTICNET_FEATURE_SET,
         "elasticnet"
     )

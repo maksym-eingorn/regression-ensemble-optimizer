@@ -5,24 +5,25 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 import config
+from storage import validate_data_split_seed
 
 
 def split_dev_test(
-    X: np.ndarray,
-    y: np.ndarray
+    X: np.ndarray, y: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Split features and target into development and test sets."""
+    validate_data_split_seed(config.DATA_SPLIT_SEED)
+
     return train_test_split(
         X,
         y,
         test_size=config.TEST_SIZE,
-        random_state=config.RANDOM_SEED
+        random_state=config.DATA_SPLIT_SEED
     )
 
 
 def scale_dev_test(
-    X_dev: np.ndarray,
-    X_test: np.ndarray
+    X_dev: np.ndarray, X_test: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, StandardScaler]:
     """
     Fit a StandardScaler on the development set and transform both

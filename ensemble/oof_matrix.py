@@ -21,11 +21,15 @@ class OOFResultBlock:
 
 
 def load_oof_result_block(
-    root_dir: str, dataset_name: str, feature_set: str, model_name: str
+    root_dir: str,
+    dataset_name: str,
+    data_split_seed: int,
+    feature_set: str,
+    model_name: str
 ) -> OOFResultBlock:
     """Load one model family's saved Optuna out-of-fold results."""
     result_dir = get_optuna_result_dir(
-        root_dir, dataset_name, feature_set, model_name
+        root_dir, dataset_name, data_split_seed, feature_set, model_name
     )
 
     results = load_optuna_results(result_dir)

@@ -12,7 +12,9 @@ import numpy as np
 import config
 from ensemble.oof_matrix import build_oof_matrix, load_oof_result_block
 from ensemble.triplet_search import find_top_triplet_ensembles
-from storage import get_dataset_output_dir, load_prepared_data
+from storage import (
+    get_data_split_name, get_dataset_output_dir, load_prepared_data
+)
 from tuning.feature_sets import feature_set_requires_autofeat
 
 
@@ -26,7 +28,10 @@ def _get_model_specs() -> list[tuple[str, str]]:
 
 
 def _get_triplet_output_dir(
-    root_dir: str, dataset_name: str, model_specs: list[tuple[str, str]]
+    root_dir: str,
+    dataset_name: str,
+    data_split_seed: int,
+    model_specs: list[tuple[str, str]]
 ) -> Path:
     """Return the output directory for triplet ensemble search results."""
     spec_name = "__".join(
@@ -34,7 +39,13 @@ def _get_triplet_output_dir(
         for model_name, feature_set in model_specs
     )
 
-    return Path(root_dir) / dataset_name / spec_name / "triplet_ols"
+    return (
+        Path(root_dir)
+        / dataset_name
+        / get_data_split_name(data_split_seed)
+        / spec_name
+        / "triplet_ols"
+    )
 
 
 def main() -> None:
@@ -43,7 +54,7 @@ def main() -> None:
     model_specs = _get_model_specs()
 
     prepared_data_dir = get_dataset_output_dir(
-        config.PREPARED_DATA_DIR, config.DATASET_NAME
+        config.PREPARED_DATA_DIR, config.DATASET_NAME, config.DATA_SPLIT_SEED
     )
 
     include_autofeat = any(
@@ -61,6 +72,7 @@ def main() -> None:
         load_oof_result_block(
             config.OPTUNA_RESULTS_DIR,
             config.DATASET_NAME,
+            config.DATA_SPLIT_SEED,
             feature_set,
             model_name
         )
@@ -94,6 +106,7 @@ def main() -> None:
     output_dir = _get_triplet_output_dir(
         config.ENSEMBLE_RESULTS_DIR,
         config.DATASET_NAME,
+        config.DATA_SPLIT_SEED,
         model_specs
     )
     output_dir.mkdir(parents=True, exist_ok=True)

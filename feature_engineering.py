@@ -11,14 +11,10 @@ import config
 
 
 def apply_autofeat(
-    X_dev: np.ndarray,
-    y_dev: np.ndarray,
-    X_test: np.ndarray
+    X_dev: np.ndarray, y_dev: np.ndarray, X_test: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, Any]:
     """
-    Fit AutoFeat on the development set and transform development/test data.
-
-    AutoFeat is fit only on the development set to avoid test data leakage.
+    Fit AutoFeat on the development set and transform development and test data.
     """
     from autofeat import AutoFeatRegressor
 
@@ -26,9 +22,7 @@ def apply_autofeat(
     np.random.seed(config.RANDOM_SEED)
 
     warnings.filterwarnings(
-        "ignore",
-        category=FutureWarning,
-        module="autofeat"
+        "ignore", category=FutureWarning, module="autofeat"
     )
 
     afreg = AutoFeatRegressor(
@@ -45,8 +39,7 @@ def apply_autofeat(
 
 
 def scale_feature_engineered_data(
-    X_dev_fe: np.ndarray,
-    X_test_fe: np.ndarray
+    X_dev_fe: np.ndarray, X_test_fe: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, StandardScaler]:
     """Scale AutoFeat-generated development and test feature matrices."""
     scaler_fe = StandardScaler()

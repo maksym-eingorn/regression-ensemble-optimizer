@@ -13,7 +13,7 @@ from preprocessing import split_dev_test, scale_dev_test
 from storage import get_dataset_output_dir, save_numpy_arrays, save_objects
 
 
-def print_shapes(arrays: dict[str, np.ndarray]) -> None:
+def _print_shapes(arrays: dict[str, np.ndarray]) -> None:
     """Print shapes of arrays for a quick sanity check."""
     for name, array in arrays.items():
         print(f"{name}: {array.shape}")
@@ -62,8 +62,7 @@ def main() -> None:
         })
 
     output_dir = get_dataset_output_dir(
-        config.PREPARED_DATA_DIR,
-        config.DATASET_NAME
+        config.PREPARED_DATA_DIR, config.DATASET_NAME, config.DATA_SPLIT_SEED
     )
 
     save_numpy_arrays(output_dir, arrays_to_save)
@@ -71,7 +70,7 @@ def main() -> None:
 
     print(f"Prepared data saved to: {output_dir}")
     print()
-    print_shapes(arrays_to_save)
+    _print_shapes(arrays_to_save)
 
 
 if __name__ == "__main__":
