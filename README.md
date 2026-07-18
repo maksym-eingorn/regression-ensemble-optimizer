@@ -4,7 +4,7 @@ A modular Python machine learning project for building a regression ensemble opt
 
 ## Overview
 
-The current version implements data preparation for supported regression datasets, XGBoost, LightGBM, and ElasticNet hyperparameter tuning with Optuna, final individual model evaluation on the held-out test set, exact OLS-weighted triplet ensemble search, triplet ensemble evaluation on the held-out test set, Caruana-style greedy ensemble selection, and greedy ensemble evaluation on the held-out test set.
+The project implements data preparation for supported regression datasets, XGBoost, LightGBM, and ElasticNet hyperparameter tuning with Optuna, final individual model evaluation on the held-out test set, exact OLS-weighted triplet ensemble search, triplet ensemble evaluation on the held-out test set, Caruana-style greedy ensemble selection, and greedy ensemble evaluation on the held-out test set.
 
 The data preparation pipeline includes dataset loading, development/test splitting, feature scaling, optional AutoFeat feature engineering, and saving prepared arrays and fitted preprocessing objects.
 
@@ -127,7 +127,7 @@ The triplet ensemble test evaluation workflow:
 * combines their test predictions using the saved OLS weights
 * evaluates the saved triplet ensembles on the held-out test set
 * saves triplet test metadata and triplet test predictions
-* prints the best OOF-ranked triplet and a diagnostic best-by-test summary among the retained triplets
+* prints OOF RMSE and test RMSE of the best OOF-ranked triplet and, for diagnostic purposes, those of the retained triplet with the lowest test RMSE
 
 The greedy ensemble test evaluation workflow:
 
@@ -336,7 +336,7 @@ Greedy selection artifacts are saved within the corresponding dataset- and split
 
 The triplet ensemble test evaluation workflow loads the saved triplets, retrains the selected base models on the full development set, combines their test predictions using the saved OLS weights, and evaluates each triplet ensemble on the held-out test set.
 
-The script reports the best OOF-ranked triplet and also prints the lowest test RMSE among the retained triplets as diagnostic information only. The test set should not be used to choose the final model selection rule.
+The script reports the test RMSE of the best OOF-ranked triplet and, for diagnostic purposes only, the lowest test RMSE among the retained triplets. The test set should not be used to choose the final model selection rule.
 
 Triplet test artifacts are saved within the corresponding dataset- and split-specific subfolder of `ensemble_results/` and include:
 
@@ -402,3 +402,9 @@ It emphasizes:
 * final evaluation on the held-out test set
 * clean separation of dataset loading, preprocessing, feature engineering, tuning, ensemble search, evaluation, and storage
 * a scalable structure for future model comparison and ensemble optimization
+
+## License
+
+Copyright 2026 Maksym Eingorn
+
+Licensed under the Apache License, Version 2.0. See the `LICENSE` file for details.

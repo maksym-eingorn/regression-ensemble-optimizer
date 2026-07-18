@@ -1,3 +1,6 @@
+# Copyright 2026 Maksym Eingorn
+# SPDX-License-Identifier: Apache-2.0
+
 # setup_triplet_search.py
 
 import os

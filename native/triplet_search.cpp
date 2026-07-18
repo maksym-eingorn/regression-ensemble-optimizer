@@ -1,3 +1,6 @@
+// Copyright 2026 Maksym Eingorn
+// SPDX-License-Identifier: Apache-2.0
+
 // native/triplet_search.cpp
 
 #include <pybind11/pybind11.h>

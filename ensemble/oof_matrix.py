@@ -1,3 +1,6 @@
+# Copyright 2026 Maksym Eingorn
+# SPDX-License-Identifier: Apache-2.0
+
 # ensemble/oof_matrix.py
 
 from dataclasses import dataclass
