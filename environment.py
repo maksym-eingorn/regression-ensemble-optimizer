@@ -13,11 +13,11 @@ def configure_environment() -> None:
     This should be called before importing NumPy, scikit-learn, AutoFeat,
     XGBoost, LightGBM, or other numerical libraries.
     """
-    os.environ.setdefault("OMP_NUM_THREADS", "1")
-    os.environ.setdefault("MKL_NUM_THREADS", "1")
-    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
-    os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
-    os.environ.setdefault("NUMBA_NUM_THREADS", "1")
-    os.environ.setdefault("XGB_NUM_THREADS", "1")
-    os.environ.setdefault("LGBM_NUM_THREADS", "1")
-    os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "1")
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+    os.environ["NUMBA_NUM_THREADS"] = "1"
+    os.environ["XGB_NUM_THREADS"] = "1"
+    os.environ["LGBM_NUM_THREADS"] = "1"
+    os.environ["VECLIB_MAXIMUM_THREADS"] = "1"

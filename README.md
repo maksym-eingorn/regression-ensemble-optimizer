@@ -1,6 +1,6 @@
 # Regression Ensemble Optimizer
 
-A modular Python machine learning project for building a regression ensemble optimization pipeline.
+A modular Python machine learning project (with C++/OpenMP acceleration) for building a regression ensemble optimization pipeline.
 
 ## Overview
 
@@ -139,6 +139,8 @@ The greedy ensemble test evaluation workflow:
 * prints OOF RMSE and test RMSE
 
 ## How to Run
+
+This project was developed and tested with Python 3.12.
 
 Install dependencies from the project directory with:
 

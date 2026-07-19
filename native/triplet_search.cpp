@@ -127,7 +127,7 @@ std::tuple<
         std::vector<TripletCandidate> local_best;
         local_best.reserve(top_n + 1);
 
-        #pragma omp for collapse(2) schedule(dynamic, 16)
+        #pragma omp for schedule(dynamic, 1)
         for (int i = 0; i < M - 2; i++) {
             for (int j = i + 1; j < M - 1; j++) {
                 for (int k = j + 1; k < M; k++) {

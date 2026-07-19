@@ -47,11 +47,17 @@ def _validate_triplet_search_inputs(
             f"got {P.shape[1]}."
         )
 
-    if not isinstance(top_n, int) or top_n < 1:
+    if isinstance(top_n, bool) or not isinstance(top_n, int) or top_n < 1:
         raise ValueError(f"top_n must be a positive integer, got {top_n}.")
 
-    if not isinstance(n_threads, int):
-        raise ValueError(f"n_threads must be an integer, got {n_threads}.")
+    if (
+        isinstance(n_threads, bool)
+        or not isinstance(n_threads, int)
+        or n_threads < 1
+    ):
+        raise ValueError(
+            f"n_threads must be a positive integer, got {n_threads}."
+        )
 
     return P, y
 

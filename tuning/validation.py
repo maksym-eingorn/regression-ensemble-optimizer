@@ -57,7 +57,7 @@ def validate_regression_inputs(X_dev, y_dev) -> tuple[np.ndarray, np.ndarray]:
 
 def validate_positive_integer(value: int, name: str) -> None:
     """Validate that a value is a positive integer."""
-    if not isinstance(value, int) or value < 1:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise ValueError(f"{name} must be a positive integer, got {value}.")
 
 
