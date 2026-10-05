@@ -10,7 +10,7 @@ import os
 RANDOM_SEED = 42
 
 # Controls only the development/test split.
-DATA_SPLIT_SEED = 10
+DATA_SPLIT_SEED = 100
 
 # --- Dataset settings ---
 
@@ -75,10 +75,14 @@ ELASTICNET_VERBOSE = True
 
 # --- Triplet ensemble search ---
 
-TRIPLET_TOP_N = 10000
+TRIPLET_TOP_N = 1000
 
-# Maximum allowed L1 norm of unrestricted OLS triplet weights.
-# This allows moderate negative weights but rejects high-cancellation triplets.
+# Fixed shrinkage of unrestricted OLS triplet weights toward equal weights.
+# 0.0 uses pure OLS weights.
+# 1.0 uses pure equal weights (1/3, 1/3, 1/3).
+TRIPLET_ALPHA = 0.0
+
+# Maximum allowed L1 norm of the final alpha-blended triplet weights.
 # Set to None to disable the guard.
 TRIPLET_WEIGHT_L1_LIMIT = 2.0
 

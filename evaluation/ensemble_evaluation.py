@@ -114,7 +114,7 @@ def _get_triplet_models(triplet: TripletMetadata) -> list[ModelMetadata]:
 
 
 def _get_triplet_weights(triplet: TripletMetadata) -> np.ndarray:
-    """Return the OLS weights for one triplet."""
+    """Return the final alpha-blended weights for one triplet."""
     return np.array(
         [
             float(triplet["wi"]),
@@ -143,7 +143,7 @@ def evaluate_triplet_ensembles_on_test(
     arrays
         Prepared dataset arrays loaded from storage.
     seed
-        Random seed used for final model retraining.
+        Random seed used for final base model retraining.
     elasticnet_max_iter
         Maximum iterations for final ElasticNet retraining.
     elasticnet_tol

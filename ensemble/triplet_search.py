@@ -5,6 +5,8 @@
 
 import numpy as np
 
+from ensemble.triplet_results import validate_triplet_alpha
+
 
 def _load_native_triplet_search_module():
     """Load the compiled C++ triplet search extension."""
@@ -97,10 +99,11 @@ def find_top_triplet_ensembles(
     y,
     top_n: int = 100,
     n_threads: int = 1,
-    weight_l1_limit: float | None = None
+    weight_l1_limit: float | None = None,
+    alpha: float = 0.0
 ) -> tuple[list[dict[str, object]], np.ndarray]:
     """
-    Run exact exhaustive OLS-weighted triplet search using the compiled C++
+    Run exact exhaustive alpha-blended triplet search using the compiled C++
     extension.
 
     Parameters
@@ -118,31 +121,41 @@ def find_top_triplet_ensembles(
     n_threads : int, default=1
         Number of OpenMP threads used by the native search.
     weight_l1_limit : float | None, default=None
-        Optional maximum allowed L1 norm of the three OLS ensemble weights,
-        defined as abs(wi) + abs(wj) + abs(wk). If None, no weight guard is
-        applied. If a float is provided, triplets whose weight L1 norm exceeds
-        this value are discarded after the native exhaustive search returns its
-        top candidates. This is intended to reject triplets with unusually
-        strong positive-negative weight cancellation.
+        Optional maximum allowed L1 norm of the three final alpha-blended
+        ensemble weights, defined as abs(wi) + abs(wj) + abs(wk). If None,
+        no weight guard is applied. If a float is provided, triplets whose
+        final weight L1 norm exceeds this value are discarded after the native
+        exhaustive search returns its top candidates. This is intended to
+        reject triplets with unusually strong positive-negative weight
+        cancellation.
+    alpha : float, default=0.0
+        Fixed shrinkage coefficient used to blend each triplet's unrestricted
+        OLS weights with equal weights. Must be between 0 and 1. An alpha of
+        0 uses pure OLS weights, while an alpha of 1 uses equal weights
+        (1/3, 1/3, 1/3).
 
     Returns
     -------
     triplet_metadata : list[dict[str, object]]
-        Metadata for the kept triplet ensembles. If weight_l1_limit is not
+        Metadata for the kept triplet ensembles, including the final
+        alpha-blended weights, unrestricted OLS weights, alpha-blended OOF
+        RMSE, and unrestricted OLS OOF RMSE. If weight_l1_limit is not
         None, the list contains only triplets passing the L1 weight guard.
         The reported rank is the post-filtered rank, while unfiltered_rank
         gives the original rank returned by the native exhaustive search.
     triplet_oof_predictions : np.ndarray
-        Out-of-fold prediction matrix for the kept triplet ensembles.
+        Out-of-fold prediction matrix produced using the final alpha-blended
+        weights for the kept triplet ensembles.
         Shape: (n_samples_dev, n_kept_triplets).
     """
     P, y = _validate_triplet_search_inputs(P, y, top_n, n_threads)
     weight_l1_limit = _validate_weight_l1_limit(weight_l1_limit)
+    alpha = validate_triplet_alpha(alpha)
 
     native = _load_native_triplet_search_module()
 
     raw_metadata, triplet_oof_predictions = native.find_top_triplets(
-        P, y, top_n, n_threads
+        P, y, top_n, n_threads, alpha
     )
 
     triplet_oof_predictions = np.asarray(triplet_oof_predictions)
@@ -151,9 +164,13 @@ def find_top_triplet_ensembles(
     kept_columns = []
 
     for unfiltered_rank, item in enumerate(raw_metadata, start=1):
-        i, j, k, wi, wj, wk, rmse = item
+        i, j, k, wi, wj, wk, ols_wi, ols_wj, ols_wk, rmse, ols_rmse = item
 
         weight_l1 = abs(float(wi)) + abs(float(wj)) + abs(float(wk))
+
+        ols_weight_l1 = (
+            abs(float(ols_wi)) + abs(float(ols_wj)) + abs(float(ols_wk))
+        )
 
         if weight_l1_limit is not None and weight_l1 > weight_l1_limit:
             continue
@@ -161,6 +178,8 @@ def find_top_triplet_ensembles(
         kept_columns.append(unfiltered_rank - 1)
 
         triplet_metadata.append({
+            "method": "ols_equal_weight_blend",
+            "alpha": float(alpha),
             "rank": len(triplet_metadata) + 1,
             "unfiltered_rank": unfiltered_rank,
             "i": int(i),
@@ -170,7 +189,12 @@ def find_top_triplet_ensembles(
             "wj": float(wj),
             "wk": float(wk),
             "weight_l1": float(weight_l1),
-            "oof_rmse": float(rmse)
+            "ols_wi": float(ols_wi),
+            "ols_wj": float(ols_wj),
+            "ols_wk": float(ols_wk),
+            "ols_weight_l1": float(ols_weight_l1),
+            "oof_rmse": float(rmse),
+            "ols_oof_rmse": float(ols_rmse)
         })
 
     if kept_columns:

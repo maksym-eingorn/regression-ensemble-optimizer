@@ -38,8 +38,10 @@ struct OmpThreadGuard {
 
 struct TripletCandidate {
     double rmse;
+    double ols_rmse;
     int i, j, k;
     double wi, wj, wk;
+    double ols_wi, ols_wj, ols_wk;
 
     // For max-heap: the worst candidate should be on top
     bool operator<(const TripletCandidate& other) const {
@@ -47,14 +49,24 @@ struct TripletCandidate {
     }
 };
 
+
+using TripletMetadata = std::tuple<
+    int, int, int,
+    double, double, double,
+    double, double, double,
+    double, double
+>;
+
+
 std::tuple<
-    std::vector<std::tuple<int,int,int,double,double,double,double>>,
+    std::vector<TripletMetadata>,
     py::array_t<double>
 > find_top_triplets(
     py::array_t<double> P_in,
     py::array_t<double> y_in,
     int top_n,
-    int n_threads = -1  // if > 0, temporarily set OpenMP threads for this call
+    int n_threads = -1,
+    double alpha = 0.0
 ) {
     if (P_in.ndim() != 2) {
         throw py::value_error("P_in must be 2D.");
@@ -78,6 +90,10 @@ std::tuple<
 
     if (top_n < 1) {
         throw py::value_error("top_n must be a positive integer.");
+    }
+
+    if (!std::isfinite(alpha) || alpha < 0.0 || alpha > 1.0) {
+        throw py::value_error("alpha must be a finite float from 0 to 1.");
     }
 
     OmpThreadGuard guard(n_threads);
@@ -137,18 +153,50 @@ std::tuple<
                           G(i, k), G(j, k), G(k, k);
                     Eigen::Vector3d s3(s(i), s(j), s(k));
 
-                    Eigen::Vector3d w = G3.colPivHouseholderQr().solve(s3);
-                    if (!std::isfinite(w(0)) || !std::isfinite(w(1)) ||
-                        !std::isfinite(w(2))) {
+                    Eigen::Vector3d ols_w = G3.colPivHouseholderQr().solve(s3);
+
+                    if (!std::isfinite(ols_w(0)) ||
+                        !std::isfinite(ols_w(1)) ||
+                        !std::isfinite(ols_w(2))) {
                         continue;
                     }
 
-                    double mse =
-                        (y2 - 2.0 * w.dot(s3) + w.dot(G3 * w)) / n_samples;
-                    if (mse < 0.0) mse = 0.0;
+                    Eigen::Vector3d w =
+                        (1.0 - alpha) * ols_w
+                        + Eigen::Vector3d::Constant(alpha / 3.0);
+
+                    double ols_mse = (
+                            y2 - 2.0 * ols_w.dot(s3) + ols_w.dot(G3 * ols_w)
+                        ) / n_samples;
+
+                    if (ols_mse < 0.0) {
+                        ols_mse = 0.0;
+                    }
+
+                    double mse = (
+                            y2 - 2.0 * w.dot(s3) + w.dot(G3 * w)
+                        ) / n_samples;
+
+                    if (mse < 0.0) {
+                        mse = 0.0;
+                    }
+
+                    double ols_rmse = std::sqrt(ols_mse);
                     double rmse = std::sqrt(mse);
 
-                    TripletCandidate cand{rmse, i, j, k, w(0), w(1), w(2)};
+                    TripletCandidate cand{
+                        rmse,
+                        ols_rmse,
+                        i,
+                        j,
+                        k,
+                        w(0),
+                        w(1),
+                        w(2),
+                        ols_w(0),
+                        ols_w(1),
+                        ols_w(2)
+                    };
 
                     if ((int)local_best.size() < top_n) {
                         local_best.push_back(cand);
@@ -187,7 +235,7 @@ std::tuple<
 
     const int n_kept = static_cast<int>(global_best.size());
 
-    std::vector<std::tuple<int,int,int,double,double,double,double>> metadata;
+    std::vector<TripletMetadata> metadata;
     metadata.reserve(n_kept);
 
     py::array_t<double> preds_out({n_samples, n_kept});
@@ -197,9 +245,17 @@ std::tuple<
         const auto& cand = global_best[col];
 
         metadata.emplace_back(
-            cand.i, cand.j, cand.k,
-            cand.wi, cand.wj, cand.wk,
-            cand.rmse
+            cand.i,
+            cand.j,
+            cand.k,
+            cand.wi,
+            cand.wj,
+            cand.wk,
+            cand.ols_wi,
+            cand.ols_wj,
+            cand.ols_wk,
+            cand.rmse,
+            cand.ols_rmse
         );
 
         for (int row = 0; row < n_samples; row++) {
@@ -216,11 +272,12 @@ std::tuple<
 
 PYBIND11_MODULE(_triplet_search, m) {
     m.doc() =
-    "Exact exhaustive top-N OLS-weighted triplet search with OpenMP and Eigen";
+    "Exact exhaustive top-N alpha-blended triplet search with OpenMP and Eigen";
 
     m.def("find_top_triplets", &find_top_triplets,
         py::arg("P_in"),
         py::arg("y_in"),
         py::arg("top_n"),
-        py::arg("n_threads") = -1);
+        py::arg("n_threads") = -1,
+        py::arg("alpha") = 0.0);
 }

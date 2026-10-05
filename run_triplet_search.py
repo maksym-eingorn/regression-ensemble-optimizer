@@ -7,17 +7,14 @@ from environment import configure_environment
 
 configure_environment()
 
-from pathlib import Path
-
 import joblib
 import numpy as np
 
 import config
 from ensemble.oof_matrix import build_oof_matrix, load_oof_result_block
 from ensemble.triplet_search import find_top_triplet_ensembles
-from storage import (
-    get_data_split_name, get_dataset_output_dir, load_prepared_data
-)
+from storage import get_dataset_output_dir, load_prepared_data
+from ensemble.triplet_results import get_triplet_output_dir
 from tuning.feature_sets import feature_set_requires_autofeat
 
 
@@ -30,29 +27,8 @@ def _get_model_specs() -> list[tuple[str, str]]:
     ]
 
 
-def _get_triplet_output_dir(
-    root_dir: str,
-    dataset_name: str,
-    data_split_seed: int,
-    model_specs: list[tuple[str, str]]
-) -> Path:
-    """Return the output directory for triplet ensemble search results."""
-    spec_name = "__".join(
-        f"{model_name}-{feature_set}"
-        for model_name, feature_set in model_specs
-    )
-
-    return (
-        Path(root_dir)
-        / dataset_name
-        / get_data_split_name(data_split_seed)
-        / spec_name
-        / "triplet_ols"
-    )
-
-
 def main() -> None:
-    """Run exact exhaustive OLS-weighted triplet ensemble search on saved
+    """Run exact exhaustive alpha-blended triplet ensemble search on saved
     out-of-fold predictions."""
     model_specs = _get_model_specs()
 
@@ -89,7 +65,8 @@ def main() -> None:
         y_dev,
         top_n=config.TRIPLET_TOP_N,
         n_threads=config.TRIPLET_N_THREADS,
-        weight_l1_limit=config.TRIPLET_WEIGHT_L1_LIMIT
+        weight_l1_limit=config.TRIPLET_WEIGHT_L1_LIMIT,
+        alpha=config.TRIPLET_ALPHA
     )
 
     if not triplet_metadata:
@@ -106,11 +83,12 @@ def main() -> None:
             column_metadata[k]
         ]
 
-    output_dir = _get_triplet_output_dir(
+    output_dir = get_triplet_output_dir(
         config.ENSEMBLE_RESULTS_DIR,
         config.DATASET_NAME,
         config.DATA_SPLIT_SEED,
-        model_specs
+        model_specs,
+        config.TRIPLET_ALPHA
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -140,16 +118,26 @@ def main() -> None:
 
     print(f"Triplet search results saved to: {output_dir}")
     print()
+    print(f"Triplet alpha = {best_triplet['alpha']:.5f}")
     print(
-        f"Best triplet OOF RMSE = {best_triplet['oof_rmse']:.5f}, "
+        f"Best blended triplet OOF RMSE = {best_triplet['oof_rmse']:.5f}, "
         f"columns "
         f"({best_triplet['i']}, {best_triplet['j']}, {best_triplet['k']})"
     )
     print(
-        "Best triplet weights: "
+        "Final alpha-blended triplet weights: "
         f"({best_triplet['wi']:.5f}, "
         f"{best_triplet['wj']:.5f}, "
         f"{best_triplet['wk']:.5f})"
+    )
+    print(
+        "Unrestricted OLS weights: "
+        f"({best_triplet['ols_wi']:.5f}, "
+        f"{best_triplet['ols_wj']:.5f}, "
+        f"{best_triplet['ols_wk']:.5f})"
+    )
+    print(
+        f"Same triplet pure OLS OOF RMSE = {best_triplet['ols_oof_rmse']:.5f}"
     )
 
 

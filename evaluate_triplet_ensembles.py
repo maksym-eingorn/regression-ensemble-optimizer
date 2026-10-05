@@ -7,16 +7,14 @@ from environment import configure_environment
 
 configure_environment()
 
-from pathlib import Path
 from typing import cast
 
 import joblib
 
 import config
 from evaluation.ensemble_evaluation import evaluate_triplet_ensembles_on_test
-from storage import (
-    get_data_split_name, get_dataset_output_dir, load_prepared_data
-)
+from storage import get_dataset_output_dir, load_prepared_data
+from ensemble.triplet_results import get_triplet_output_dir
 from tuning.feature_sets import feature_set_requires_autofeat
 
 
@@ -29,36 +27,16 @@ def _get_model_specs() -> list[tuple[str, str]]:
     ]
 
 
-def _get_triplet_output_dir(
-    root_dir: str,
-    dataset_name: str,
-    data_split_seed: int,
-    model_specs: list[tuple[str, str]]
-) -> Path:
-    """Return the output directory for triplet ensemble search results."""
-    spec_name = "__".join(
-        f"{model_name}-{feature_set}"
-        for model_name, feature_set in model_specs
-    )
-
-    return (
-        Path(root_dir)
-        / dataset_name
-        / get_data_split_name(data_split_seed)
-        / spec_name
-        / "triplet_ols"
-    )
-
-
 def main() -> None:
     """Evaluate saved top triplet ensembles on the held-out test set."""
     model_specs = _get_model_specs()
 
-    triplet_output_dir = _get_triplet_output_dir(
+    triplet_output_dir = get_triplet_output_dir(
         config.ENSEMBLE_RESULTS_DIR,
         config.DATASET_NAME,
         config.DATA_SPLIT_SEED,
-        model_specs
+        model_specs,
+        config.TRIPLET_ALPHA
     )
 
     triplet_metadata_path = triplet_output_dir / "triplet_oof_metadata.pkl"
@@ -116,8 +94,9 @@ def main() -> None:
     print(f"Triplet test results saved to: {triplet_output_dir}")
     print()
 
+    print(f"Triplet alpha = {config.TRIPLET_ALPHA:.5f}")
     print(
-        f"Best OOF triplet: "
+        f"Best blended OOF triplet: "
         f"OOF RMSE = {float(best_by_oof['oof_rmse']):.5f}, "
         f"test RMSE = {float(best_by_oof['test_rmse']):.5f}, "
         f"columns "
