@@ -4,15 +4,15 @@ A modular Python machine learning project (with C++/OpenMP acceleration) for bui
 
 ## Overview
 
-The project implements data preparation for supported regression datasets, XGBoost, LightGBM, and ElasticNet hyperparameter tuning with Optuna, final individual model evaluation on the held-out test set, exact OLS-weighted triplet ensemble search, triplet ensemble evaluation on the held-out test set, Caruana-style greedy ensemble selection, and greedy ensemble evaluation on the held-out test set.
+The project implements data preparation for supported regression datasets, XGBoost, LightGBM, and ElasticNet hyperparameter tuning with Optuna, final individual model evaluation on the held-out test set, exact alpha-blended triplet ensemble search, triplet ensemble evaluation on the held-out test set, Caruana-style greedy ensemble selection, and greedy ensemble evaluation on the held-out test set.
 
 The data preparation pipeline includes dataset loading, development/test splitting, feature scaling, optional AutoFeat feature engineering, and saving prepared arrays and fitted preprocessing objects.
 
 The XGBoost, LightGBM, and ElasticNet workflows load prepared development data, select the configured feature set, run Optuna with K-fold cross-validation, store out-of-fold predictions for ensemble search, save tuning results locally, and evaluate the best tuned individual models on the held-out test set.
 
-The triplet ensemble workflow combines saved out-of-fold prediction columns from configured model families, runs exact exhaustive triplet search with unconstrained OLS weights, optionally applies an L1 weight guard to discard high-cancellation triplets, saves the retained OOF-ranked triplets, and evaluates the saved triplet ensembles on the held-out test set.
+The triplet ensemble workflow combines saved out-of-fold prediction columns from configured model families, runs exact exhaustive triplet search with unrestricted OLS weights blended toward equal weights by a fixed coefficient configured through `TRIPLET_ALPHA`, optionally applies an L1 weight guard to discard high-cancellation triplets, saves the retained OOF-ranked triplets in alpha-specific result folders, and evaluates the saved triplet ensembles on the held-out test set.
 
-The greedy ensemble workflow uses the same saved out-of-fold prediction matrix, builds a convex ensemble through Caruana-style greedy selection, allows repeated model selections when configured, converts selection counts into final ensemble weights, saves the selected greedy ensemble, and evaluates it on the held-out test set.
+The greedy ensemble workflow uses the same unified out-of-fold prediction matrix built from the saved model-family predictions, builds a convex ensemble through Caruana-style greedy selection, allows repeated model selections when configured, converts selection counts into final ensemble weights, saves the selected greedy ensemble, and evaluates it on the held-out test set.
 
 The project supports California Housing and Diabetes datasets. For California Housing, capped target values are removed before splitting.
 
@@ -22,7 +22,7 @@ The project supports California Housing and Diabetes datasets. For California Ho
 `run_xgboost_optuna.py` — XGBoost Optuna tuning workflow\
 `run_lightgbm_optuna.py` — LightGBM Optuna tuning workflow\
 `run_elasticnet_optuna.py` — ElasticNet Optuna tuning workflow\
-`run_triplet_search.py` — exact OLS-weighted triplet ensemble search workflow\
+`run_triplet_search.py` — exact alpha-blended triplet ensemble search workflow\
 `run_greedy_ensemble_selection.py` — Caruana-style greedy ensemble selection workflow\
 `evaluate_xgboost.py` — XGBoost evaluation on the test set\
 `evaluate_lightgbm.py` — LightGBM evaluation on the test set\
@@ -38,7 +38,8 @@ The project supports California Housing and Diabetes datasets. For California Ho
 `feature_engineering.py` — optional AutoFeat feature engineering and scaling\
 `storage.py` — saving and loading prepared NumPy arrays and fitted preprocessing objects\
 `ensemble/oof_matrix.py` — construction of a unified out-of-fold prediction matrix\
-`ensemble/triplet_search.py` — Python wrapper for the native triplet search extension\
+`ensemble/triplet_search.py` — Python wrapper for the native alpha-blended triplet search extension\
+`ensemble/triplet_results.py` — triplet alpha validation and alpha-specific result path helpers\
 `ensemble/greedy_selection.py` — Caruana-style greedy ensemble selection logic\
 `evaluation/validation.py` — validation helpers for final model evaluation\
 `evaluation/xgboost_evaluation.py` — XGBoost retraining on the full development set and RMSE evaluation on the test set\
@@ -51,7 +52,7 @@ The project supports California Housing and Diabetes datasets. For California Ho
 `tuning/xgboost_optuna.py` — XGBoost Optuna tuning logic\
 `tuning/lightgbm_optuna.py` — LightGBM Optuna tuning logic\
 `tuning/elasticnet_optuna.py` — ElasticNet Optuna tuning logic\
-`native/triplet_search.cpp` — C++/OpenMP implementation of exact exhaustive triplet search\
+`native/triplet_search.cpp` — C++/OpenMP implementation of exact exhaustive alpha-blended triplet search\
 `setup_triplet_search.py` — build script for the native triplet search extension\
 `requirements.txt` — Python package dependencies
 
@@ -102,11 +103,12 @@ The triplet ensemble search workflow:
 
 * loads saved out-of-fold predictions from the configured model families
 * builds one unified out-of-fold prediction matrix
-* searches all 3-model combinations exactly
-* fits unconstrained OLS weights for each triplet on development set out-of-fold predictions
-* ranks triplets by OOF RMSE
-* optionally applies the configured L1 weight guard to discard high-cancellation triplets
-* saves the retained OOF-ranked triplet metadata and out-of-fold predictions
+* searches all combinations of three saved model/trial prediction columns exactly
+* fits unrestricted OLS weights for each triplet on development set out-of-fold predictions
+* blends the unrestricted OLS weights toward equal weights using the fixed coefficient configured by `TRIPLET_ALPHA`
+* ranks triplets by the OOF RMSE produced by the final alpha-blended weights
+* optionally applies the configured L1 weight guard to discard triplets whose final alpha-blended weight L1 norm exceeds the configured limit
+* saves the retained OOF-ranked triplet metadata and out-of-fold predictions in an alpha-specific result folder
 
 The greedy ensemble selection workflow:
 
@@ -118,13 +120,13 @@ The greedy ensemble selection workflow:
 * converts selection counts into convex weights
 * saves the greedy ensemble metadata and out-of-fold predictions
 
-Generated ensemble search artifacts are saved locally within dataset- and split-specific subfolders of `ensemble_results/`.
+Generated ensemble search artifacts are saved locally within dataset- and split-specific subfolders of `ensemble_results/`. Both triplet and greedy artifacts are further separated by the configured model/feature-set specification. Triplet artifacts are stored in alpha-specific result folders, while greedy ensemble artifacts are stored in `greedy_selection` folders.
 
 The triplet ensemble test evaluation workflow:
 
 * loads the saved OOF-ranked triplet metadata
 * retrains the selected base models on the full development set
-* combines their test predictions using the saved OLS weights
+* combines their test predictions using the saved final alpha-blended weights
 * evaluates the saved triplet ensembles on the held-out test set
 * saves triplet test metadata and triplet test predictions
 * prints OOF RMSE and test RMSE of the best OOF-ranked triplet and, for diagnostic purposes, those of the retained triplet with the lowest test RMSE
@@ -190,23 +192,23 @@ Before running triplet ensemble search, build the native C++ extension:
 
 The native extension requires Eigen. If Eigen is not located in the default path expected by the build script, set the `EIGEN_INCLUDE_DIR` environment variable to the Eigen folder before building.
 
-Then run exact OLS-weighted triplet ensemble search:
+Then run exact alpha-blended triplet ensemble search:
 
 `python run_triplet_search.py`
 
-The triplet search script loads saved Optuna out-of-fold predictions, builds a unified out-of-fold matrix, runs exact exhaustive triplet search, optionally applies the configured L1 weight guard, and saves the retained OOF-ranked triplet results into the corresponding split-specific subfolder within `ensemble_results/`.
+The triplet search script loads saved Optuna out-of-fold predictions, builds a unified out-of-fold matrix, runs exact exhaustive triplet search using the fixed coefficient configured by `TRIPLET_ALPHA`, optionally applies the configured L1 weight guard, and saves the retained OOF-ranked triplet results into the corresponding dataset-, split-, model/feature-set-, and alpha-specific subfolder within `ensemble_results/`.
 
 Evaluate the saved triplet ensembles on the held-out test set:
 
 `python evaluate_triplet_ensembles.py`
 
-The triplet evaluation script retrains the selected base models on the full development set, combines their test predictions using the saved OLS weights, evaluates the triplets on the held-out test set, and saves the resulting test artifacts into the corresponding split-specific subfolder within `ensemble_results/`.
+The triplet evaluation script retrains the selected base models on the full development set, combines their test predictions using the saved final alpha-blended weights, evaluates the triplets on the held-out test set, and saves the resulting test artifacts into the corresponding dataset-, split-, model/feature-set-, and alpha-specific subfolder within `ensemble_results/`.
 
 Also, run Caruana-style greedy ensemble selection:
 
 `python run_greedy_ensemble_selection.py`
 
-The greedy ensemble selection workflow does not require building the native C++ extension; it only requires the saved Optuna out-of-fold prediction artifacts.
+The greedy ensemble selection workflow does not require building the native C++ extension; it requires the prepared development data and the saved Optuna out-of-fold prediction artifacts.
 
 Evaluate the saved greedy ensemble on the held-out test set:
 
@@ -249,7 +251,8 @@ Important ElasticNet optimization settings are:
 Important triplet ensemble search settings are:
 
 `TRIPLET_TOP_N` — number of top unguarded OOF-ranked triplets requested from the native exhaustive search before optional Python-side filtering\
-`TRIPLET_WEIGHT_L1_LIMIT` — optional maximum allowed L1 norm of the three OLS triplet weights; set to `None` to disable the guard\
+`TRIPLET_ALPHA` — fixed blending coefficient between unrestricted OLS weights and equal weights; `0.0` uses pure OLS weights, `1.0` uses equal weights `(1/3, 1/3, 1/3)`, and intermediate values shrink OLS weights toward equal weights\
+`TRIPLET_WEIGHT_L1_LIMIT` — optional maximum allowed L1 norm of the three final alpha-blended triplet weights; set to `None` to disable the guard\
 `TRIPLET_N_THREADS` — number of OpenMP threads used by the native triplet search
 
 Important greedy ensemble selection settings are:
@@ -280,7 +283,7 @@ The currently supported feature sets are:
 
 If `USE_AUTOFEAT = True`, the pipeline fits AutoFeat on the development set and applies the learned transformation to both development and test sets.
 
-AutoFeat is fit only on the development set to avoid test data leakage.
+AutoFeat is fitted only on the development set to avoid test data leakage.
 
 The default ElasticNet configuration uses the `autofeat_scaled` feature set, so AutoFeat-generated outputs must be available before running ElasticNet Optuna tuning and test evaluation.
 
@@ -304,17 +307,23 @@ The best hyperparameters from the corresponding Optuna study are used to retrain
 
 The retrained model is then evaluated on the held-out test set, and the final test RMSE is printed.
 
-This keeps the test set separate from hyperparameter tuning and uses it only for final individual model evaluation.
+Within the individual-model workflow, this keeps the test set separate from hyperparameter tuning and uses it only at the final evaluation stage.
 
 ## Triplet Ensemble Search
 
 The triplet ensemble search workflow uses saved out-of-fold predictions from the configured XGBoost, LightGBM, and ElasticNet Optuna runs.
 
-It builds a unified out-of-fold prediction matrix where each column corresponds to one saved Optuna trial. It then performs exact exhaustive search over all 3-column combinations. For each triplet, unconstrained OLS weights are fitted on the development set out-of-fold predictions, and the triplet is ranked by full-vector OOF RMSE. The native search returns the top unguarded OOF-ranked candidates; if `TRIPLET_WEIGHT_L1_LIMIT` is not `None`, Python-side filtering then discards triplets whose weight L1 norm exceeds the configured limit.
+It builds a unified out-of-fold prediction matrix where each column corresponds to one saved Optuna trial. It then performs exact exhaustive search over all 3-column combinations. For each triplet, unrestricted OLS weights are fitted on the development set out-of-fold predictions and then blended toward equal weights according to the fixed coefficient configured by `TRIPLET_ALPHA`. The final weights are:
+
+`w_alpha = (1 - alpha) * w_OLS + alpha * (1/3, 1/3, 1/3)`
+
+An alpha of `0.0` therefore uses pure unrestricted OLS weights, while an alpha of `1.0` uses equal weights. Triplets are ranked by full-vector OOF RMSE computed from the final alpha-blended weights. The native search returns the top unguarded OOF-ranked candidates; if `TRIPLET_WEIGHT_L1_LIMIT` is not `None`, Python-side filtering then discards triplets whose final alpha-blended weight L1 norm exceeds the configured limit.
 
 The test set is not used during the triplet search.
 
-Triplet search artifacts are saved within the corresponding dataset- and split-specific subfolder of `ensemble_results/` and include:
+Triplet results are separated by alpha value. In the current configuration, `TRIPLET_ALPHA = 0.0`, so pure unrestricted OLS weights are used and the results are stored in the `triplet_alpha_0` folder. Other fixed alpha values use their own result folders, preventing results for different alpha values from overwriting one another.
+
+Triplet search artifacts are saved within the corresponding dataset-, split-, model/feature-set-, and alpha-specific subfolder of `ensemble_results/` and include:
 
 * `base_model_column_metadata.pkl`
 * `triplet_oof_metadata.pkl`
@@ -328,7 +337,7 @@ It builds the same unified out-of-fold prediction matrix used by triplet search,
 
 The test set is not used during the greedy ensemble selection.
 
-Greedy selection artifacts are saved within the corresponding dataset- and split-specific subfolder of `ensemble_results/` and include:
+Greedy selection artifacts are saved within the corresponding dataset-, split-, and model/feature-set-specific `greedy_selection` subfolder of `ensemble_results/` and include:
 
 * `base_model_column_metadata.pkl`
 * `greedy_oof_metadata.pkl`
@@ -336,11 +345,11 @@ Greedy selection artifacts are saved within the corresponding dataset- and split
 
 ## Triplet Ensemble Test Evaluation
 
-The triplet ensemble test evaluation workflow loads the saved triplets, retrains the selected base models on the full development set, combines their test predictions using the saved OLS weights, and evaluates each triplet ensemble on the held-out test set.
+The triplet ensemble test evaluation workflow loads the saved triplets for the configured alpha, retrains the selected base models on the full development set, combines their test predictions using the saved final alpha-blended weights, and evaluates each triplet ensemble on the held-out test set.
 
-The script reports the test RMSE of the best OOF-ranked triplet and, for diagnostic purposes only, the lowest test RMSE among the retained triplets. The test set should not be used to choose the final model selection rule.
+The script reports the OOF RMSE and test RMSE of the best OOF-ranked triplet and, for diagnostic purposes only, the OOF RMSE and test RMSE of the retained triplet with the lowest test RMSE. The test set should not be used to choose the final model selection rule.
 
-Triplet test artifacts are saved within the corresponding dataset- and split-specific subfolder of `ensemble_results/` and include:
+Triplet test artifacts are saved within the corresponding dataset-, split-, model/feature-set-, and alpha-specific subfolder of `ensemble_results/` and include:
 
 * `triplet_test_metadata.pkl`
 * `triplet_test_predictions.pkl`
@@ -351,7 +360,7 @@ The greedy ensemble test evaluation workflow loads the saved greedy ensemble met
 
 The script reports the greedy ensemble OOF RMSE and test RMSE.
 
-Greedy ensemble test artifacts are saved within the corresponding dataset- and split-specific subfolder of `ensemble_results/` and include:
+Greedy ensemble test artifacts are saved within the corresponding dataset-, split-, and model/feature-set-specific `greedy_selection` subfolder of `ensemble_results/` and include:
 
 * `greedy_test_metadata.pkl`
 * `greedy_test_predictions.pkl`
@@ -398,7 +407,7 @@ It emphasizes:
 * configurable feature set selection
 * Optuna-based hyperparameter tuning
 * K-fold out-of-fold prediction generation
-* exact exhaustive ensemble search over saved out-of-fold predictions
+* exact exhaustive alpha-blended triplet ensemble search over saved out-of-fold predictions
 * native C++/OpenMP acceleration for combinatorial triplet search
 * Caruana-style greedy ensemble selection over saved out-of-fold predictions
 * final evaluation on the held-out test set
