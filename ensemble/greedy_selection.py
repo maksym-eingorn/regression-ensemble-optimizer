@@ -23,8 +23,8 @@ def _validate_greedy_inputs(
     ensemble_size: int,
     allow_repeats: bool
 ) -> tuple[np.ndarray, np.ndarray, int]:
-    """Validate and convert greedy selection inputs and return the effective
-    pool size."""
+    """Validate and convert greedy selection inputs and return the maximum
+    candidate pool size."""
     P = np.asarray(P, dtype=np.float64)
     y = np.asarray(y, dtype=np.float64)
 
@@ -42,6 +42,12 @@ def _validate_greedy_inputs(
             f"got {P.shape[0]} != {y.shape[0]}."
         )
 
+    if P.shape[0] < 1:
+        raise ValueError(
+            f"Greedy ensemble selection requires at least 1 sample, "
+            f"got {P.shape[0]}."
+        )
+
     if P.shape[1] < 1:
         raise ValueError("Greedy ensemble selection requires at least 1 model.")
 
@@ -53,9 +59,9 @@ def _validate_greedy_inputs(
 
     if pool_size is not None:
         validate_positive_integer(pool_size, "pool_size")
-        effective_pool_size = min(pool_size, P.shape[1])
+        maximum_pool_size = min(pool_size, P.shape[1])
     else:
-        effective_pool_size = P.shape[1]
+        maximum_pool_size = P.shape[1]
 
     validate_positive_integer(ensemble_size, "ensemble_size")
 
@@ -64,7 +70,7 @@ def _validate_greedy_inputs(
             f"allow_repeats must be a boolean, got {allow_repeats}."
         )
 
-    return P, y, effective_pool_size
+    return P, y, maximum_pool_size
 
 
 def precompute_dot_products(
@@ -103,6 +109,34 @@ def precompute_dot_products(
     return G, s, y2
 
 
+def _compute_nonnegative_sse(
+    y2: float, linear_term: float, quadratic_term: float, n_samples_dev: int
+) -> float | None:
+    """
+    Return a numerically valid nonnegative SSE.
+
+    Tiny negative values consistent with floating-point round-off are clamped
+    to zero. Materially negative or non-finite SSE values are rejected.
+    """
+    raw_sse = float(y2 - linear_term + quadratic_term)
+
+    if not np.isfinite(raw_sse):
+        return None
+
+    scale = max(
+        1.0, abs(float(y2)), abs(float(linear_term)), abs(float(quadratic_term))
+    )
+
+    tolerance = (
+        128.0 * np.finfo(np.float64).eps * float(n_samples_dev) * scale
+    )
+
+    if raw_sse < -tolerance:
+        return None
+
+    return max(0.0, raw_sse)
+
+
 def _greedy_ensemble_selection_from_dots(
     G: np.ndarray,
     s: np.ndarray,
@@ -112,16 +146,17 @@ def _greedy_ensemble_selection_from_dots(
     ensemble_size: int,
     seed: int,
     allow_repeats: bool
-) -> tuple[list[int], list[float], list[int], int, float]:
+) -> tuple[list[int], list[float], list[int], int, int, float]:
     """
     Run Caruana-style greedy ensemble selection from dot products.
 
-    The algorithm first restricts the candidate set to the best individual
-    models by OOF MSE. It then builds an ensemble greedily by repeatedly adding
-    the model that gives the lowest OOF MSE after averaging the selected
-    prediction vectors. If repeats are allowed, the same model may be selected
-    multiple times; final convex weights are selection counts divided by
-    the number of completed selections.
+    The algorithm first excludes numerically invalid individual models and
+    restricts the remaining candidate set to the best individual models by OOF
+    MSE. It then builds an ensemble greedily by repeatedly adding the model
+    that gives the lowest OOF MSE after averaging the selected prediction
+    vectors. If repeats are allowed, the same model may be selected multiple
+    times; final convex weights are selection counts divided by the number of
+    completed selections.
 
     Parameters
     ----------
@@ -136,7 +171,8 @@ def _greedy_ensemble_selection_from_dots(
     n_samples_dev
         Number of samples in the development set.
     pool_size
-        Number of the best individual models considered by greedy selection.
+        Maximum number of the best numerically valid individual models
+        considered by greedy selection.
     ensemble_size
         Maximum number of greedy selection steps.
     seed
@@ -152,6 +188,9 @@ def _greedy_ensemble_selection_from_dots(
         Convex weights corresponding to selected_columns.
     selection_counts
         Number of times each selected model was chosen.
+    effective_pool_size
+        Number of numerically valid individual models retained in the
+        candidate pool.
     actual_ensemble_size
         Number of greedy selection steps actually completed.
     oof_rmse
@@ -162,10 +201,30 @@ def _greedy_ensemble_selection_from_dots(
     diag_g = np.diag(G).astype(np.float64)
     s64 = s.astype(np.float64)
 
-    individual_sse = y2 - 2.0 * s64 + diag_g
-    individual_mse = individual_sse / n_samples_dev
+    individual_sse = np.full(len(s64), np.inf, dtype=np.float64)
 
-    pool_idx = np.argsort(individual_mse)[:pool_size]
+    for j in range(len(s64)):
+        sse = _compute_nonnegative_sse(
+            y2, 2.0 * float(s64[j]), float(diag_g[j]), n_samples_dev
+        )
+
+        if sse is not None:
+            individual_sse[j] = sse
+
+    valid_idx = np.flatnonzero(np.isfinite(individual_sse))
+
+    if len(valid_idx) == 0:
+        raise RuntimeError(
+            "Greedy ensemble selection found no numerically valid "
+            "individual models."
+        )
+
+    valid_order = valid_idx[
+        np.argsort(individual_sse[valid_idx], kind="stable")
+    ]
+
+    pool_idx = valid_order[:pool_size]
+    effective_pool_size = len(pool_idx)
 
     G_pool = G[np.ix_(pool_idx, pool_idx)].astype(np.float64)
     s_pool = s64[pool_idx].astype(np.float64)
@@ -188,11 +247,19 @@ def _greedy_ensemble_selection_from_dots(
             if not allow_repeats and counts[j] > 0:
                 continue
 
-            Sy_new = Sy + s_pool[j]
-            SS_new = SS + 2.0 * v[j] + G_pool[j, j]
+            Sy_new = Sy + float(s_pool[j])
+            SS_new = (SS + 2.0 * float(v[j]) + float(G_pool[j, j]))
             k_new = k + 1
 
-            sse_new = y2 - 2.0 * (Sy_new / k_new) + SS_new / (k_new * k_new)
+            linear_term = 2.0 * (Sy_new / k_new)
+            quadratic_term = SS_new / (k_new * k_new)
+
+            sse_new = _compute_nonnegative_sse(
+                y2, linear_term, quadratic_term, n_samples_dev
+            )
+
+            if sse_new is None:
+                continue
 
             if sse_new < best_sse - tol:
                 best_sse = sse_new
@@ -205,12 +272,12 @@ def _greedy_ensemble_selection_from_dots(
 
         best_j = best_candidates[rng.randint(len(best_candidates))]
 
-        previous_cross_sum = v[best_j]
+        previous_cross_sum = float(v[best_j])
 
         counts[best_j] += 1
         v += G_pool[best_j, :]
-        Sy += s_pool[best_j]
-        SS += 2.0 * previous_cross_sum + G_pool[best_j, best_j]
+        Sy += float(s_pool[best_j])
+        SS += 2.0 * previous_cross_sum + float(G_pool[best_j, best_j])
         k += 1
 
     if k == 0:
@@ -228,14 +295,27 @@ def _greedy_ensemble_selection_from_dots(
     s_sub = s64[selected_columns]
     G_sub = G[np.ix_(selected_columns, selected_columns)]
 
-    sse_final = float(
-        y2 - 2.0 * (s_sub @ weights_array)
-        + weights_array @ (G_sub @ weights_array)
+    linear_term_final = 2.0 * float(s_sub @ weights_array)
+    quadratic_term_final = float(weights_array @ (G_sub @ weights_array))
+
+    sse_final = _compute_nonnegative_sse(
+        y2, linear_term_final, quadratic_term_final, n_samples_dev
     )
-    mse_final = max(0.0, sse_final / n_samples_dev)
+
+    if sse_final is None:
+        raise RuntimeError("Final greedy ensemble SSE is numerically invalid.")
+
+    mse_final = sse_final / n_samples_dev
     oof_rmse = math.sqrt(mse_final)
 
-    return selected_columns, weights, selected_counts, k, oof_rmse
+    return (
+        selected_columns,
+        weights,
+        selected_counts,
+        effective_pool_size,
+        k,
+        oof_rmse
+    )
 
 
 def find_greedy_ensemble(
@@ -267,8 +347,9 @@ def find_greedy_ensemble(
         Metadata list describing the saved model/trial represented by each
         column of P.
     pool_size
-        Number of the best individual models considered by greedy selection.
-        If None, the full model zoo is used.
+        Maximum number of the best numerically valid individual models
+        considered by greedy selection. If None, all numerically valid models
+        are considered.
     ensemble_size
         Maximum number of greedy selection steps.
     seed
@@ -286,7 +367,7 @@ def find_greedy_ensemble(
         ensemble.
         Shape: (n_samples_dev,).
     """
-    P, y, effective_pool_size = _validate_greedy_inputs(
+    P, y, maximum_pool_size = _validate_greedy_inputs(
         P, y, column_metadata, pool_size, ensemble_size, allow_repeats
     )
 
@@ -296,6 +377,7 @@ def find_greedy_ensemble(
         selected_columns,
         weights,
         selection_counts,
+        effective_pool_size,
         actual_ensemble_size,
         oof_rmse
     ) = _greedy_ensemble_selection_from_dots(
@@ -303,7 +385,7 @@ def find_greedy_ensemble(
             s,
             y2,
             n_samples_dev=P.shape[0],
-            pool_size=effective_pool_size,
+            pool_size=maximum_pool_size,
             ensemble_size=ensemble_size,
             seed=seed,
             allow_repeats=allow_repeats

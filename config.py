@@ -10,7 +10,7 @@ import os
 RANDOM_SEED = 42
 
 # Controls only the development/test split.
-DATA_SPLIT_SEED = 100
+DATA_SPLIT_SEED = 20
 
 # --- Dataset settings ---
 
@@ -36,7 +36,7 @@ AUTOFEAT_N_JOBS = 1
 
 # Supported feature sets:
 # "original", "original_scaled", "autofeat", "autofeat_scaled"
-XGBOOST_FEATURE_SET = "original_scaled"
+XGBOOST_FEATURE_SET = "original"
 
 XGBOOST_N_TRIALS = 1000
 XGBOOST_N_JOBS = 1
@@ -50,7 +50,7 @@ XGBOOST_VERBOSE = True
 
 # Supported feature sets:
 # "original", "original_scaled", "autofeat", "autofeat_scaled"
-LIGHTGBM_FEATURE_SET = "original_scaled"
+LIGHTGBM_FEATURE_SET = "original"
 
 LIGHTGBM_N_TRIALS = 1000
 LIGHTGBM_N_JOBS = 1
@@ -93,12 +93,13 @@ TRIPLET_N_THREADS = max(1, (os.cpu_count() or 2) - 1)
 
 # --- Greedy ensemble selection ---
 
-# Number of the best individual models considered by greedy selection.
-# Set to None to use the full model zoo.
+# Maximum number of the best numerically valid individual models considered
+# by greedy selection. Set to None to consider all numerically valid models.
 GREEDY_POOL_SIZE = None
 
-# Number of greedy selection steps. With repeats enabled, this is the total
-# number of model selections, not necessarily the number of unique models.
+# Maximum number of greedy selection steps. With repeats enabled, this is the
+# maximum total number of model selections, not necessarily the number of
+# unique models.
 GREEDY_ENSEMBLE_SIZE = 3
 
 # Caruana-style greedy ensemble selection allows the same model to be selected

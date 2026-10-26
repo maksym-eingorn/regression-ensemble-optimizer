@@ -12,6 +12,7 @@
 #include <cmath>
 #include <vector>
 #include <algorithm>
+#include <limits>
 
 namespace py = pybind11;
 
@@ -43,9 +44,15 @@ struct TripletCandidate {
     double wi, wj, wk;
     double ols_wi, ols_wj, ols_wk;
 
-    // For max-heap: the worst candidate should be on top
+    // Lower RMSE is better. Exact RMSE ties prefer the lexicographically
+    // smaller triplet (i, j, k). With std::push_heap, the worst candidate
+    // therefore remains at the heap front.
     bool operator<(const TripletCandidate& other) const {
-        return rmse < other.rmse;
+        if (rmse != other.rmse) {
+            return rmse < other.rmse;
+        }
+
+        return std::tie(i, j, k) < std::tie(other.i, other.j, other.k);
     }
 };
 
@@ -58,6 +65,44 @@ using TripletMetadata = std::tuple<
 >;
 
 
+bool compute_nonnegative_mse(
+    double y2,
+    double linear_term,
+    double quadratic_term,
+    int n_samples,
+    double& mse_out
+) {
+    const double raw_sse = y2 - linear_term + quadratic_term;
+
+    if (!std::isfinite(raw_sse)) {
+        return false;
+    }
+
+    const double scale = std::max({
+        1.0,
+        std::abs(y2),
+        std::abs(linear_term),
+        std::abs(quadratic_term)
+    });
+
+    const double tolerance =
+        128.0
+        * std::numeric_limits<double>::epsilon()
+        * static_cast<double>(n_samples)
+        * scale;
+
+    if (raw_sse < -tolerance) {
+        return false;
+    }
+
+    mse_out =
+        std::max(0.0, raw_sse)
+        / static_cast<double>(n_samples);
+
+    return std::isfinite(mse_out);
+}
+
+
 std::tuple<
     std::vector<TripletMetadata>,
     py::array_t<double>
@@ -66,6 +111,7 @@ std::tuple<
     py::array_t<double> y_in,
     int top_n,
     int n_threads = -1,
+    double weight_l1_limit = std::numeric_limits<double>::infinity(),
     double alpha = 0.0
 ) {
     if (P_in.ndim() != 2) {
@@ -82,6 +128,12 @@ std::tuple<
         );
     }
 
+    if (P_in.shape(0) < 1) {
+        throw py::value_error(
+            "Triplet search requires at least 1 sample."
+        );
+    }
+
     if (P_in.shape(1) < 3) {
         throw py::value_error(
             "Triplet search requires at least 3 model columns."
@@ -90,6 +142,12 @@ std::tuple<
 
     if (top_n < 1) {
         throw py::value_error("top_n must be a positive integer.");
+    }
+
+    if (std::isnan(weight_l1_limit) || weight_l1_limit <= 0.0) {
+        throw py::value_error(
+            "weight_l1_limit must be a positive float or positive infinity."
+        );
     }
 
     if (!std::isfinite(alpha) || alpha < 0.0 || alpha > 1.0) {
@@ -165,24 +223,45 @@ std::tuple<
                         (1.0 - alpha) * ols_w
                         + Eigen::Vector3d::Constant(alpha / 3.0);
 
-                    double ols_mse = (
-                            y2 - 2.0 * ols_w.dot(s3) + ols_w.dot(G3 * ols_w)
-                        ) / n_samples;
+                    const double weight_l1 =
+                        std::abs(w(0)) + std::abs(w(1)) + std::abs(w(2));
 
-                    if (ols_mse < 0.0) {
-                        ols_mse = 0.0;
+                    if (weight_l1 > weight_l1_limit) {
+                        continue;
                     }
 
-                    double mse = (
-                            y2 - 2.0 * w.dot(s3) + w.dot(G3 * w)
-                        ) / n_samples;
+                    const double ols_linear_term = 2.0 * ols_w.dot(s3);
+                    const double ols_quadratic_term = ols_w.dot(G3 * ols_w);
 
-                    if (mse < 0.0) {
-                        mse = 0.0;
+                    double ols_mse = 0.0;
+
+                    if (!compute_nonnegative_mse(
+                            y2,
+                            ols_linear_term,
+                            ols_quadratic_term,
+                            n_samples,
+                            ols_mse
+                        )) {
+                        continue;
                     }
 
-                    double ols_rmse = std::sqrt(ols_mse);
-                    double rmse = std::sqrt(mse);
+                    const double linear_term = 2.0 * w.dot(s3);
+                    const double quadratic_term = w.dot(G3 * w);
+
+                    double mse = 0.0;
+
+                    if (!compute_nonnegative_mse(
+                            y2,
+                            linear_term,
+                            quadratic_term,
+                            n_samples,
+                            mse
+                        )) {
+                        continue;
+                    }
+
+                    const double ols_rmse = std::sqrt(ols_mse);
+                    const double rmse = std::sqrt(mse);
 
                     TripletCandidate cand{
                         rmse,
@@ -201,7 +280,7 @@ std::tuple<
                     if ((int)local_best.size() < top_n) {
                         local_best.push_back(cand);
                         std::push_heap(local_best.begin(), local_best.end());
-                    } else if (rmse < local_best.front().rmse) {
+                    } else if (cand < local_best.front()) {
                         std::pop_heap(local_best.begin(), local_best.end());
                         local_best.back() = cand;
                         std::push_heap(local_best.begin(), local_best.end());
@@ -216,7 +295,7 @@ std::tuple<
                 if ((int)global_best.size() < top_n) {
                     global_best.push_back(cand);
                     std::push_heap(global_best.begin(), global_best.end());
-                } else if (cand.rmse < global_best.front().rmse) {
+                } else if (cand < global_best.front()) {
                     std::pop_heap(global_best.begin(), global_best.end());
                     global_best.back() = cand;
                     std::push_heap(global_best.begin(), global_best.end());
@@ -229,7 +308,7 @@ std::tuple<
         global_best.begin(),
         global_best.end(),
         [](const TripletCandidate& a, const TripletCandidate& b) {
-            return a.rmse < b.rmse;
+            return a < b;
         }
     );
 
@@ -279,5 +358,7 @@ PYBIND11_MODULE(_triplet_search, m) {
         py::arg("y_in"),
         py::arg("top_n"),
         py::arg("n_threads") = -1,
+        py::arg("weight_l1_limit") =
+            std::numeric_limits<double>::infinity(),
         py::arg("alpha") = 0.0);
 }

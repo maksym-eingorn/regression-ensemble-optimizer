@@ -8,13 +8,13 @@ The project implements data preparation for supported regression datasets, XGBoo
 
 The data preparation pipeline includes dataset loading, development/test splitting, feature scaling, optional AutoFeat feature engineering, and saving prepared arrays and fitted preprocessing objects.
 
-The XGBoost, LightGBM, and ElasticNet workflows load prepared development data, select the configured feature set, run Optuna with K-fold cross-validation, store out-of-fold predictions for ensemble search, save tuning results locally, and evaluate the best tuned individual models on the held-out test set.
+The XGBoost, LightGBM, and ElasticNet workflows load prepared development data, select the configured feature set, run Optuna with K-fold cross-validation, store out-of-fold predictions for ensemble search, save tuning results locally, and evaluate the best-tuned individual models on the held-out test set.
 
 The triplet ensemble workflow combines saved out-of-fold prediction columns from configured model families, runs exact exhaustive triplet search with unrestricted OLS weights blended toward equal weights by a fixed coefficient configured through `TRIPLET_ALPHA`, optionally applies an L1 weight guard to discard high-cancellation triplets, saves the retained OOF-ranked triplets in alpha-specific result folders, and evaluates the saved triplet ensembles on the held-out test set.
 
 The greedy ensemble workflow uses the same unified out-of-fold prediction matrix built from the saved model-family predictions, builds a convex ensemble through Caruana-style greedy selection, allows repeated model selections when configured, converts selection counts into final ensemble weights, saves the selected greedy ensemble, and evaluates it on the held-out test set.
 
-The project supports California Housing and Diabetes datasets. For California Housing, capped target values are removed before splitting.
+The project supports the California Housing and Diabetes datasets. For California Housing, capped target values are removed before splitting.
 
 ## Project Structure
 
@@ -104,10 +104,10 @@ The triplet ensemble search workflow:
 * loads saved out-of-fold predictions from the configured model families
 * builds one unified out-of-fold prediction matrix
 * searches all combinations of three saved model/trial prediction columns exactly
-* fits unrestricted OLS weights for each triplet on development set out-of-fold predictions
+* fits unrestricted OLS weights for each triplet on out-of-fold predictions for the development set
 * blends the unrestricted OLS weights toward equal weights using the fixed coefficient configured by `TRIPLET_ALPHA`
-* ranks triplets by the OOF RMSE produced by the final alpha-blended weights
-* optionally applies the configured L1 weight guard to discard triplets whose final alpha-blended weight L1 norm exceeds the configured limit
+* optionally applies the configured L1 weight guard inside the native exhaustive search, making only triplets whose final alpha-blended weight L1 norm does not exceed the configured limit eligible for retention
+* ranks eligible triplets by the OOF RMSE produced by the final alpha-blended weights
 * saves the retained OOF-ranked triplet metadata and out-of-fold predictions in an alpha-specific result folder
 
 The greedy ensemble selection workflow:
@@ -172,15 +172,15 @@ In addition, run ElasticNet Optuna tuning:
 
 The ElasticNet tuning script loads the prepared development data, runs Optuna-based ElasticNet tuning, and saves results into the corresponding split-specific subfolder within `optuna_results/`.
 
-To evaluate the best tuned XGBoost model on the test set, run:
+To evaluate the best-tuned XGBoost model on the test set, run:
 
 `python evaluate_xgboost.py`
 
-To evaluate the best tuned LightGBM model on the test set, run:
+To evaluate the best-tuned LightGBM model on the test set, run:
 
 `python evaluate_lightgbm.py`
 
-To evaluate the best tuned ElasticNet model on the test set, run:
+To evaluate the best-tuned ElasticNet model on the test set, run:
 
 `python evaluate_elasticnet.py`
 
@@ -250,15 +250,15 @@ Important ElasticNet optimization settings are:
 
 Important triplet ensemble search settings are:
 
-`TRIPLET_TOP_N` — number of top unguarded OOF-ranked triplets requested from the native exhaustive search before optional Python-side filtering\
+`TRIPLET_TOP_N` — maximum number of top OOF-ranked numerically valid triplets returned by the native exhaustive search after applying the optional L1 weight guard\
 `TRIPLET_ALPHA` — fixed blending coefficient between unrestricted OLS weights and equal weights; `0.0` uses pure OLS weights, `1.0` uses equal weights `(1/3, 1/3, 1/3)`, and intermediate values shrink OLS weights toward equal weights\
 `TRIPLET_WEIGHT_L1_LIMIT` — optional maximum allowed L1 norm of the three final alpha-blended triplet weights; set to `None` to disable the guard\
 `TRIPLET_N_THREADS` — number of OpenMP threads used by the native triplet search
 
 Important greedy ensemble selection settings are:
 
-`GREEDY_POOL_SIZE` — number of the best individual models considered by greedy selection; set to `None` to use the full model zoo\
-`GREEDY_ENSEMBLE_SIZE` — number of greedy selection steps\
+`GREEDY_POOL_SIZE` — maximum number of the best numerically valid individual models considered by greedy selection; set to `None` to consider all numerically valid models\
+`GREEDY_ENSEMBLE_SIZE` — maximum number of greedy selection steps\
 `GREEDY_ALLOW_REPEATS` — whether the same model may be selected multiple times
 
 `OPTUNA_RESULTS_DIR` represents the root output folder for Optuna result artifacts.
@@ -295,7 +295,7 @@ The XGBoost, LightGBM, and ElasticNet tuning workflows use Optuna to search over
 
 Each Optuna trial trains one model configuration across all K folds and produces one full out-of-fold prediction vector for the development set. Each trial is scored by full-vector OOF RMSE; per-fold RMSE values are saved separately for diagnostics.
 
-The final out-of-fold prediction matrix for each model family has one column per trial and is saved for triplet search and greedy ensemble selection workflows.
+The final out-of-fold prediction matrix for each model family has one column per trial and is saved for the triplet search and greedy ensemble selection workflows.
 
 The test set is not used during Optuna tuning. After tuning is complete, the best saved configuration for each model family can be retrained on the full development set and evaluated once on the held-out test set.
 
@@ -313,11 +313,11 @@ Within the individual-model workflow, this keeps the test set separate from hype
 
 The triplet ensemble search workflow uses saved out-of-fold predictions from the configured XGBoost, LightGBM, and ElasticNet Optuna runs.
 
-It builds a unified out-of-fold prediction matrix where each column corresponds to one saved Optuna trial. It then performs exact exhaustive search over all 3-column combinations. For each triplet, unrestricted OLS weights are fitted on the development set out-of-fold predictions and then blended toward equal weights according to the fixed coefficient configured by `TRIPLET_ALPHA`. The final weights are:
+It builds a unified out-of-fold prediction matrix where each column corresponds to one saved Optuna trial. It then performs exact exhaustive search over all 3-column combinations. For each triplet, unrestricted OLS weights are fitted on out-of-fold predictions for the development set and then blended toward equal weights according to the fixed coefficient configured by `TRIPLET_ALPHA`. The final weights are:
 
 `w_alpha = (1 - alpha) * w_OLS + alpha * (1/3, 1/3, 1/3)`
 
-An alpha of `0.0` therefore uses pure unrestricted OLS weights, while an alpha of `1.0` uses equal weights. Triplets are ranked by full-vector OOF RMSE computed from the final alpha-blended weights. The native search returns the top unguarded OOF-ranked candidates; if `TRIPLET_WEIGHT_L1_LIMIT` is not `None`, Python-side filtering then discards triplets whose final alpha-blended weight L1 norm exceeds the configured limit.
+An alpha of `0.0` therefore uses pure unrestricted OLS weights, while an alpha of `1.0` uses equal weights. If `TRIPLET_WEIGHT_L1_LIMIT` is not `None`, the L1 weight guard is enforced inside the native exhaustive search before candidates enter the top-N heaps, so only triplets whose final alpha-blended weight L1 norm does not exceed the configured limit are eligible for retention. Eligible triplets are ranked by full-vector OOF RMSE computed from the final alpha-blended weights, and the native search returns up to `TRIPLET_TOP_N` of the best valid candidates. Numerically invalid triplets are skipped. Exact OOF-RMSE ties are ordered deterministically by the triplet column indices `(i, j, k)`.
 
 The test set is not used during the triplet search.
 
@@ -333,7 +333,7 @@ Triplet search artifacts are saved within the corresponding dataset-, split-, mo
 
 The greedy ensemble selection workflow uses saved out-of-fold predictions from the configured XGBoost, LightGBM, and ElasticNet Optuna runs.
 
-It builds the same unified out-of-fold prediction matrix used by triplet search, where each column corresponds to one saved Optuna trial. It then runs Caruana-style greedy ensemble selection. The algorithm first restricts the candidate set to the configured pool of the best individual models, unless the full model zoo is used. It then builds a convex ensemble by repeatedly adding the model that gives the lowest OOF MSE after averaging the selected prediction vectors. If repeats are enabled, the same model may be selected multiple times. Final convex weights are selection counts divided by the total number of completed greedy selections.
+It builds the same unified out-of-fold prediction matrix used by triplet search, where each column corresponds to one saved Optuna trial. It then runs Caruana-style greedy ensemble selection. The algorithm first excludes numerically invalid individual models. If `GREEDY_POOL_SIZE` is not `None`, it then restricts the candidate set to at most `GREEDY_POOL_SIZE` of the best remaining individual models; otherwise, all numerically valid models are considered. It then builds a convex ensemble by repeatedly adding the model that gives the lowest OOF MSE after averaging the selected prediction vectors. If repeats are enabled, the same model may be selected multiple times. Final convex weights are selection counts divided by the total number of completed greedy selections.
 
 The test set is not used during the greedy ensemble selection.
 
@@ -373,11 +373,15 @@ For stricter reproducibility, `PYTHONHASHSEED` can be set before launching Pytho
 
 Optuna tuning uses a seeded sampler, seeded K-fold splitting, and seeded XGBoost, LightGBM, and ElasticNet models.
 
+For maximum reproducibility, the Optuna worker settings should remain at `*_N_JOBS = 1`; parallel Optuna execution may make trial scheduling and the resulting search sequence less reproducible.
+
 The development/test split is controlled separately by `DATA_SPLIT_SEED`. Changing `DATA_SPLIT_SEED` creates a different held-out split and writes generated artifacts under `split_seed_<DATA_SPLIT_SEED>` subfolders, allowing multiple split experiments for the same dataset without overwriting previous results.
 
 When comparing different data splits, `RANDOM_SEED` should normally remain fixed so that model and tuning randomness are controlled while only the development/test split changes.
 
 The native triplet search uses OpenMP for parallel exhaustive search. Its thread count is controlled by `TRIPLET_N_THREADS`.
+
+Exact-RMSE ties in the native triplet search are resolved deterministically by lexicographic triplet-column order.
 
 ## Generated Files
 
