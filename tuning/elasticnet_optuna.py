@@ -9,7 +9,7 @@ import numpy as np
 import optuna
 from sklearn.linear_model import ElasticNet
 from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import KFold
+from tuning.fold_preprocessing import prepare_kfold_feature_data
 
 from tuning.validation import (
     validate_kfold_settings,
@@ -23,6 +23,7 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 def run_optuna_kfold_elasticnet(
     X_dev,
     y_dev,
+    feature_set: str,
     n_trials: int = 100,
     n_jobs: int = 1,
     n_splits: int = 5,
@@ -48,11 +49,16 @@ def run_optuna_kfold_elasticnet(
     Parameters
     ----------
     X_dev
-        Development feature matrix used for model training and cross-validation.
+        Raw development feature matrix used to construct fold-specific
+        training and validation feature matrices.
         Expected shape: (n_samples_dev, n_features).
     y_dev
         Development target vector corresponding to X_dev.
         Expected shape: (n_samples_dev,).
+    feature_set
+        Feature set applied separately within each cross-validation fold.
+        Supported values: original, original_scaled, autofeat,
+        autofeat_scaled.
     n_trials : int, default=100
         Number of Optuna trials.
     n_jobs : int, default=1
@@ -65,8 +71,8 @@ def run_optuna_kfold_elasticnet(
     tol : float, default=1e-4
         Optimization tolerance for ElasticNet.
     seed : int, default=42
-        Random seed used by the Optuna sampler, K-fold splitting, and
-        ElasticNet.
+        Random seed used by the Optuna sampler, K-fold splitting,
+        fold-specific AutoFeat processing, and ElasticNet.
     verbose : bool, default=False
         Whether to print the OOF RMSE for each trial.
 
@@ -99,6 +105,10 @@ def run_optuna_kfold_elasticnet(
     if tol <= 0:
         raise ValueError(f"tol must be positive, got {tol}.")
 
+    prepared_folds = prepare_kfold_feature_data(
+        X_dev, y_dev, feature_set, n_splits, seed
+    )
+
     sampler = optuna.samplers.TPESampler(seed=seed)
     study = optuna.create_study(direction="minimize", sampler=sampler)
 
@@ -114,26 +124,21 @@ def run_optuna_kfold_elasticnet(
             )
         }
 
-        kf = KFold(n_splits=n_splits, shuffle=True, random_state=seed)
-
         oof_pred = np.zeros(len(y_dev), dtype=np.float32)
         per_fold_rmses = []
 
-        for train_idx, valid_idx in kf.split(X_dev):
-            X_train, X_valid = X_dev[train_idx], X_dev[valid_idx]
-            y_train, y_valid = y_dev[train_idx], y_dev[valid_idx]
+        for fold in prepared_folds:
+            y_train = y_dev[fold.train_indices]
+            y_valid = y_dev[fold.valid_indices]
 
             model = ElasticNet(
-                max_iter=max_iter,
-                tol=tol,
-                random_state=seed,
-                **params
+                max_iter=max_iter, tol=tol, random_state=seed, **params
             )
 
-            model.fit(X_train, y_train)
-            y_pred = model.predict(X_valid)
+            model.fit(fold.X_train, y_train)
+            y_pred = model.predict(fold.X_valid)
 
-            oof_pred[valid_idx] = y_pred
+            oof_pred[fold.valid_indices] = y_pred
 
             fold_rmse = math.sqrt(mean_squared_error(y_valid, y_pred))
             per_fold_rmses.append(fold_rmse)

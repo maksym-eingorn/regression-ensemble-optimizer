@@ -9,9 +9,6 @@ configure_environment()
 
 import config
 from storage import get_dataset_output_dir, load_prepared_data
-from tuning.feature_sets import (
-    feature_set_requires_autofeat, get_development_data
-)
 from tuning.result_storage import (
     get_optuna_result_dir, save_optuna_results
 )
@@ -24,15 +21,10 @@ def main() -> None:
         config.PREPARED_DATA_DIR, config.DATASET_NAME, config.DATA_SPLIT_SEED
     )
 
-    include_autofeat = feature_set_requires_autofeat(
-        config.ELASTICNET_FEATURE_SET
-    )
+    arrays, _ = load_prepared_data(prepared_data_dir, include_autofeat=False)
 
-    arrays, _ = load_prepared_data(
-        prepared_data_dir, include_autofeat=include_autofeat
-    )
-
-    X_dev, y_dev = get_development_data(arrays, config.ELASTICNET_FEATURE_SET)
+    X_dev = arrays["X_dev"]
+    y_dev = arrays["y_dev"]
 
     (
         study_enet,
@@ -44,6 +36,7 @@ def main() -> None:
     ) = run_optuna_kfold_elasticnet(
         X_dev,
         y_dev,
+        feature_set=config.ELASTICNET_FEATURE_SET,
         n_trials=config.ELASTICNET_N_TRIALS,
         n_jobs=config.ELASTICNET_N_JOBS,
         n_splits=config.ELASTICNET_N_SPLITS,

@@ -14,15 +14,19 @@ import config
 
 
 def apply_autofeat(
-    X_dev: np.ndarray, y_dev: np.ndarray, X_test: np.ndarray
+    X_fit: np.ndarray,
+    y_fit: np.ndarray,
+    X_transform: np.ndarray,
+    seed: int = config.RANDOM_SEED
 ) -> tuple[np.ndarray, np.ndarray, Any]:
     """
-    Fit AutoFeat on the development set and transform development and test data.
+    Fit AutoFeat on X_fit and y_fit, then transform both X_fit and
+    X_transform.
     """
     from autofeat import AutoFeatRegressor
 
-    random.seed(config.RANDOM_SEED)
-    np.random.seed(config.RANDOM_SEED)
+    random.seed(seed)
+    np.random.seed(seed)
 
     warnings.filterwarnings(
         "ignore", category=FutureWarning, module="autofeat"
@@ -35,10 +39,10 @@ def apply_autofeat(
         verbose=0
     )
 
-    X_dev_fe = afreg.fit_transform(X_dev, y_dev)
-    X_test_fe = afreg.transform(X_test)
+    X_fit_fe = afreg.fit_transform(X_fit, y_fit)
+    X_transform_fe = afreg.transform(X_transform)
 
-    return X_dev_fe.to_numpy(), X_test_fe.to_numpy(), afreg
+    return X_fit_fe.to_numpy(), X_transform_fe.to_numpy(), afreg
 
 
 def scale_feature_engineered_data(
