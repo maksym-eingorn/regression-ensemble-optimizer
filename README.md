@@ -6,9 +6,9 @@ A modular Python machine learning project (with C++/OpenMP acceleration) for bui
 
 The project implements data preparation for supported regression datasets, XGBoost, LightGBM, and ElasticNet hyperparameter tuning with Optuna, final individual model evaluation on the held-out test set, exact alpha-blended triplet ensemble search, triplet ensemble evaluation on the held-out test set, Caruana-style greedy ensemble selection, and greedy ensemble evaluation on the held-out test set.
 
-The data preparation pipeline includes dataset loading, development/test splitting, feature scaling, optional AutoFeat feature engineering, and saving prepared arrays and fitted preprocessing objects.
+The data preparation pipeline includes dataset loading, development/test splitting, full-development feature scaling, optional full-development AutoFeat feature engineering, and saving prepared arrays and fitted preprocessing objects. The prepared full-development/test feature matrices support final retraining and held-out test evaluation.
 
-The XGBoost, LightGBM, and ElasticNet workflows load prepared development data, select the configured feature set, run Optuna with K-fold cross-validation, store out-of-fold predictions for ensemble search, save tuning results locally, and evaluate the best-tuned individual models on the held-out test set.
+The XGBoost, LightGBM, and ElasticNet tuning workflows load the raw prepared development features and targets, construct the configured feature set separately within each cross-validation fold, run Optuna with K-fold cross-validation, store out-of-fold predictions for ensemble search, and save tuning results locally. Any fitted preprocessing used for out-of-fold tuning is fitted only on each fold's training rows and then applied to that fold's validation rows.
 
 The triplet ensemble workflow combines saved out-of-fold prediction columns from configured model families, runs exact exhaustive triplet search with unrestricted OLS weights blended toward equal weights by a fixed coefficient configured through `TRIPLET_ALPHA`, optionally applies an L1 weight guard to discard high-cancellation triplets, saves the retained OOF-ranked triplets in alpha-specific result folders, and evaluates the saved triplet ensembles on the held-out test set.
 
@@ -34,8 +34,8 @@ The project supports the California Housing and Diabetes datasets. For Californi
 `datasets/loader.py` — dataset dispatcher\
 `datasets/california_housing.py` — California Housing dataset loading and cleaning\
 `datasets/diabetes.py` — Diabetes dataset loading\
-`preprocessing.py` — development/test splitting and standard feature scaling\
-`feature_engineering.py` — optional AutoFeat feature engineering and scaling\
+`preprocessing.py` — development/test splitting and full-development standard feature scaling for prepared evaluation artifacts\
+`feature_engineering.py` — shared AutoFeat fitting/transformation helper and full-development engineered-feature scaling\
 `storage.py` — saving and loading prepared NumPy arrays and fitted preprocessing objects\
 `ensemble/oof_matrix.py` — construction of a unified out-of-fold prediction matrix\
 `ensemble/triplet_search.py` — Python wrapper for the native alpha-blended triplet search extension\
@@ -46,7 +46,8 @@ The project supports the California Housing and Diabetes datasets. For Californi
 `evaluation/lightgbm_evaluation.py` — LightGBM retraining on the full development set and RMSE evaluation on the test set\
 `evaluation/elasticnet_evaluation.py` — ElasticNet retraining on the full development set and RMSE evaluation on the test set\
 `evaluation/ensemble_evaluation.py` — triplet and greedy ensemble retraining on the full development set and RMSE evaluation on the test set\
-`tuning/feature_sets.py` — feature set selection for tuning and evaluation workflows\
+`tuning/feature_sets.py` — feature set validation and prepared-array selection for final evaluation workflows\
+`tuning/fold_preprocessing.py` — training-fold-only feature preparation for out-of-fold tuning\
 `tuning/validation.py` — shared validation helpers for feature and target arrays\
 `tuning/result_storage.py` — saving and loading Optuna result artifacts\
 `tuning/xgboost_optuna.py` — XGBoost Optuna tuning logic\
@@ -63,11 +64,13 @@ The data preparation pipeline:
 * loads the selected regression dataset
 * removes capped target values for California Housing
 * splits the data into development and test sets
-* scales the original features
-* optionally applies AutoFeat feature engineering
-* scales the AutoFeat-generated features
+* fits a standard scaler on the full development set and applies it to the original development and test feature matrices
+* optionally fits AutoFeat on the full development features and targets and applies the learned transformation to the development and test sets
+* fits a second standard scaler on the full development AutoFeat-generated features and applies it to the engineered development and test feature matrices
 * saves prepared arrays as `.npy` files
 * saves fitted preprocessing objects as `.pkl` files
+
+The full-development/test feature matrices are used for final model retraining and held-out test evaluation, while the fitted preprocessing objects are saved alongside them. Optuna out-of-fold tuning does not use the globally fitted transformed feature matrices or preprocessing objects; fitted preprocessing for out-of-fold tuning is constructed separately within each cross-validation fold.
 
 Generated data artifacts are saved locally in dataset- and split-specific subfolders:
 
@@ -76,18 +79,22 @@ Generated data artifacts are saved locally in dataset- and split-specific subfol
 
 The XGBoost, LightGBM, and ElasticNet Optuna tuning workflows:
 
-* load prepared data for the selected dataset
-* choose the configured feature set
+* load the raw prepared development features and targets for the selected dataset
+* use the configured feature set to construct training and validation matrices separately within each K-fold split
+* for `original`, use the raw training and validation features without fitted preprocessing
+* for `original_scaled`, fit `StandardScaler` only on the training fold and apply it to the training and validation features
+* for `autofeat`, fit AutoFeat only on the training-fold features and targets and apply the learned transformation to the training and validation features
+* for `autofeat_scaled`, fit AutoFeat only on the training-fold features and targets, transform the training and validation features, then fit `StandardScaler` only on the engineered training fold and apply it to the engineered training and validation features
+* prepare the fold-specific feature matrices once per tuning run and reuse them across all Optuna trials
 * run model-specific hyperparameter tuning with Optuna
-* use K-fold cross-validation on the development set
 * score each trial by full-vector OOF RMSE
 * store one out-of-fold prediction column per Optuna trial
 * save the completed Optuna study, trial numbers, out-of-fold predictions, OOF RMSE values, per-fold RMSE values, and hyperparameters
 
 Generated Optuna artifacts are saved locally in dataset-, split-, feature-set-, and model-specific subfolders, such as:
 
-`optuna_results/california_housing/split_seed_<DATA_SPLIT_SEED>/original_scaled/xgboost/`\
-`optuna_results/california_housing/split_seed_<DATA_SPLIT_SEED>/original_scaled/lightgbm/`\
+`optuna_results/california_housing/split_seed_<DATA_SPLIT_SEED>/original/xgboost/`\
+`optuna_results/california_housing/split_seed_<DATA_SPLIT_SEED>/original/lightgbm/`\
 `optuna_results/california_housing/split_seed_<DATA_SPLIT_SEED>/autofeat_scaled/elasticnet/`
 
 The individual model test evaluation workflows:
@@ -158,19 +165,19 @@ Next, run XGBoost Optuna tuning:
 
 `python run_xgboost_optuna.py`
 
-The XGBoost tuning script loads the prepared development data, runs Optuna-based XGBoost tuning, and saves results into the corresponding split-specific subfolder within `optuna_results/`.
+The XGBoost tuning script loads the raw prepared development features and targets, constructs the configured feature set separately within each cross-validation fold, runs Optuna-based XGBoost tuning, and saves results into the corresponding dataset-, split-, feature-set-, and model-specific subfolder within `optuna_results/`.
 
 Also run LightGBM Optuna tuning:
 
 `python run_lightgbm_optuna.py`
 
-The LightGBM tuning script loads the prepared development data, runs Optuna-based LightGBM tuning, and saves results into the corresponding split-specific subfolder within `optuna_results/`.
+The LightGBM tuning script loads the raw prepared development features and targets, constructs the configured feature set separately within each cross-validation fold, runs Optuna-based LightGBM tuning, and saves results into the corresponding dataset-, split-, feature-set-, and model-specific subfolder within `optuna_results/`.
 
 In addition, run ElasticNet Optuna tuning:
 
 `python run_elasticnet_optuna.py`
 
-The ElasticNet tuning script loads the prepared development data, runs Optuna-based ElasticNet tuning, and saves results into the corresponding split-specific subfolder within `optuna_results/`.
+The ElasticNet tuning script loads the raw prepared development features and targets, constructs the configured feature set separately within each cross-validation fold, runs Optuna-based ElasticNet tuning, and saves results into the corresponding dataset-, split-, feature-set-, and model-specific subfolder within `optuna_results/`.
 
 To evaluate the best-tuned XGBoost model on the test set, run:
 
@@ -223,15 +230,15 @@ Important data preparation settings include:
 `DATASET_NAME` — selected dataset name\
 `TEST_SIZE` — test set fraction\
 `DATA_SPLIT_SEED` — random seed used only for the development/test split; it also determines the split-specific output subfolder name\
-`RANDOM_SEED` — random seed used for model tuning, K-fold splitting, model training, and other non-split randomness\
-`USE_AUTOFEAT` — whether to apply AutoFeat feature engineering\
+`RANDOM_SEED` — random seed used for Optuna sampling, K-fold splitting, fold-specific AutoFeat processing, model training, and other non-split randomness\
+`USE_AUTOFEAT` — whether `main.py` creates full-development/test AutoFeat feature matrices and saves the fitted AutoFeat/scaler objects; the prepared feature matrices are used for final retraining and test evaluation\
 `PREPARED_DATA_DIR` — root output folder for prepared data
 
 Important model-specific Optuna settings are grouped by model family.
 
 For XGBoost, the settings use the `XGBOOST_` prefix. For LightGBM, the settings use the `LIGHTGBM_` prefix. For ElasticNet, the settings use the `ELASTICNET_` prefix.
 
-`XGBOOST_FEATURE_SET` / `LIGHTGBM_FEATURE_SET` / `ELASTICNET_FEATURE_SET` — selected feature set for tuning and evaluation\
+`XGBOOST_FEATURE_SET` / `LIGHTGBM_FEATURE_SET` / `ELASTICNET_FEATURE_SET` — selected feature set constructed fold-specifically during out-of-fold tuning and used to select the corresponding full-development/test prepared matrices during final evaluation\
 `XGBOOST_N_TRIALS` / `LIGHTGBM_N_TRIALS` / `ELASTICNET_N_TRIALS` — number of Optuna trials\
 `XGBOOST_N_JOBS` / `LIGHTGBM_N_JOBS` / `ELASTICNET_N_JOBS` — number of parallel Optuna workers\
 `XGBOOST_N_SPLITS` / `LIGHTGBM_N_SPLITS` / `ELASTICNET_N_SPLITS` — number of K-fold cross-validation splits\
@@ -281,23 +288,35 @@ The currently supported feature sets are:
 
 ## AutoFeat
 
-If `USE_AUTOFEAT = True`, the pipeline fits AutoFeat on the development set and applies the learned transformation to both development and test sets.
+During data preparation, if `USE_AUTOFEAT = True`, `main.py` fits AutoFeat on the full development features and targets and applies the learned transformation to both the development and test feature matrices. The resulting full-development/test AutoFeat feature matrices are used for final retraining and held-out test evaluation, while the fitted AutoFeat and scaler objects are saved alongside them.
 
-AutoFeat is fitted only on the development set to avoid test data leakage.
+During Optuna out-of-fold tuning, AutoFeat preprocessing is handled independently of those globally prepared artifacts. For the `autofeat` and `autofeat_scaled` feature sets, AutoFeat is fitted separately inside each cross-validation fold using only that fold's training features and training targets, and the learned transformation is then applied to that fold's validation features.
 
-The default ElasticNet configuration uses the `autofeat_scaled` feature set, so AutoFeat-generated outputs must be available before running ElasticNet Optuna tuning and test evaluation.
+For `autofeat_scaled`, a standard scaler is fitted only on the AutoFeat-generated training-fold features and is then applied to the engineered training and validation features.
 
-If `USE_AUTOFEAT = False`, the pipeline skips AutoFeat and saves only the original and scaled original feature matrices.
+This fold-specific procedure prevents validation-target information from influencing AutoFeat feature generation and prevents validation rows from influencing fitted scaling during out-of-fold tuning.
+
+The default ElasticNet configuration uses the `autofeat_scaled` feature set. Its out-of-fold tuning therefore constructs AutoFeat and scaling separately within each training fold. Although this tuning step does not depend on the full-development AutoFeat artifacts created by `main.py`, `USE_AUTOFEAT = True` is required for the complete default workflow: the current triplet-search and greedy-selection scripts load those artifacts because the configured model set includes an AutoFeat feature set, and ElasticNet and ensemble test evaluation use the corresponding full-development/test AutoFeat feature matrices.
+
+If `USE_AUTOFEAT = False`, `main.py` skips creation of full-development/test AutoFeat artifacts and saves only the original and scaled original prepared feature matrices.
+
+Optuna tuning with fold-specific AutoFeat can therefore run from raw development data independently of `USE_AUTOFEAT`, but the complete current workflow requires the full-development/test AutoFeat artifacts whenever a configured model uses `autofeat` or `autofeat_scaled`.
 
 ## XGBoost, LightGBM, and ElasticNet Optuna Tuning
 
 The XGBoost, LightGBM, and ElasticNet tuning workflows use Optuna to search over model-specific hyperparameters.
 
+Each tuning workflow starts from the raw development feature matrix and target vector. Before Optuna trials begin, the configured feature set is prepared separately for each K-fold split. Any fitted preprocessing is learned only from that fold's training rows and, where applicable, training targets, and is then applied to the corresponding validation rows.
+
+The prepared fold-specific feature matrices are constructed once per tuning run and reused across all Optuna trials because preprocessing does not depend on the model hyperparameters being optimized.
+
 Each Optuna trial trains one model configuration across all K folds and produces one full out-of-fold prediction vector for the development set. Each trial is scored by full-vector OOF RMSE; per-fold RMSE values are saved separately for diagnostics.
 
 The final out-of-fold prediction matrix for each model family has one column per trial and is saved for the triplet search and greedy ensemble selection workflows.
 
-The test set is not used during Optuna tuning. After tuning is complete, the best saved configuration for each model family can be retrained on the full development set and evaluated once on the held-out test set.
+In the current configuration, XGBoost and LightGBM use the raw `original` feature set, while ElasticNet uses `autofeat_scaled`.
+
+The test set is not used during Optuna tuning. After tuning is complete, the best saved configuration for each model family can be retrained on the full development set using the corresponding full-development prepared feature set and evaluated once on the held-out test set.
 
 ## XGBoost, LightGBM, and ElasticNet Test Evaluation
 
@@ -371,7 +390,7 @@ The project limits hidden parallelism in numerical libraries through `environmen
 
 For stricter reproducibility, `PYTHONHASHSEED` can be set before launching Python.
 
-Optuna tuning uses a seeded sampler, seeded K-fold splitting, and seeded XGBoost, LightGBM, and ElasticNet models.
+Optuna tuning uses a seeded sampler, seeded K-fold splitting, seeded fold-specific AutoFeat processing when applicable, and seeded XGBoost, LightGBM, and ElasticNet models. Fold-specific preprocessing is prepared once from the deterministic K-fold partition and reused across all Optuna trials.
 
 For maximum reproducibility, the Optuna worker settings should remain at `*_N_JOBS = 1`; parallel Optuna execution may make trial scheduling and the resulting search sequence less reproducible.
 
@@ -407,7 +426,7 @@ It emphasizes:
 
 * modular Python architecture
 * reproducible data preparation
-* leakage-aware preprocessing
+* strict training-fold-only preprocessing for out-of-fold tuning
 * configurable feature set selection
 * Optuna-based hyperparameter tuning
 * K-fold out-of-fold prediction generation
